@@ -1,0 +1,37 @@
+schema: '2.0'
+stages:
+  process_data:
+    cmd: echo "This is the data processing stage" >&2
+    deps:
+    - path: data/raw
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+    outs:
+    - path: data/processed
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+  train_model:
+    cmd: echo "This is the model training stage" >&2
+    deps:
+    - path: data/processed
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+    outs:
+    - path: models
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+  eval_model:
+    cmd: echo "This is the model evalualtion stage" >&2
+    deps:
+    - path: models
+      md5: d751713988987e9331980363e24189ce.dir
+      size: 0
+      nfiles: 0
+    outs:
+    - path: metrics/metrics.json
+      md5: 323a6f745a4a0c26a9353616785481e8
+      size: 166

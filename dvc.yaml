@@ -1,0 +1,20 @@
+stages:
+  process_data:
+    cmd: echo "This is the data processing stage" >&2
+    deps:
+    - data/raw
+    outs:
+    - data/processed
+  train_model:
+    cmd: echo "This is the model training stage" >&2
+    deps:
+    - data/processed
+    outs:
+    - models
+  eval_model:
+    cmd: echo "This is the model evalualtion stage" >&2
+    deps:
+    - models
+    metrics:
+    - metrics/metrics.json:
+        cache: false
