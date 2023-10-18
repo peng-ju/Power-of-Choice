@@ -2,6 +2,12 @@
 
 reproduce the paper "Towards Understanding Biased Client Selection in Federated Learning"
 
+## Activate virtual environment with Python3.10
+source venv/bin/activate
+
+numpy==1.26.1
+matplotlib==3.8.0
+
 ## Instructions
 
 1. Clone the repo.
