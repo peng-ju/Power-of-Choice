@@ -5,6 +5,7 @@ reproduce the paper "Towards Understanding Biased Client Selection in Federated 
 ## Activate virtual environment with Python3.10
 source venv/bin/activate
 
+- python==3.10.13
 - numpy==1.26.1
 - matplotlib==3.8.0
 
