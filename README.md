@@ -3,7 +3,8 @@
 reproduce the paper "Towards Understanding Biased Client Selection in Federated Learning"
 
 ## Activate virtual environment with Python3.10
-source venv/bin/activate
+source venv/bin/activate 
+deactivate
 
 - python==3.10.13
 - numpy==1.26.1
