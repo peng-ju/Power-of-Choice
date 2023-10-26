@@ -11,6 +11,7 @@ deactivate
 - numpy==1.26.1
 - matplotlib==3.8.0
 - tqdm==4.66.1
+- pip3.10 install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 ## Instructions
 
