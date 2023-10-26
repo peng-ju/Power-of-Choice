@@ -1,4 +1,5 @@
-/env/
+/venv/
 .ipynb_checkpoints/
 /models
 synthetic_data/
+__pycache__/
