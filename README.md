@@ -7,11 +7,6 @@ source venv/bin/activate
 deactivate
 
 - python==3.10.13
-- ipykernel==6.25.2
-- numpy==1.26.1
-- matplotlib==3.8.0
-- tqdm==4.66.1
-- pip3.10 install torch torchvision --index-url https://download.pytorch.org/whl/cu118
 
 ## Instructions
 
