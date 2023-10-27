@@ -1,41 +1,18 @@
-import numpy as np
-from tqdm import tqdm
-import json
 import os
-
-from optimizer import *
-from FedAvg import *
+import json
+from tqdm import tqdm
+import numpy as np
 
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-# import matplotlib.pylab as pylab
 
-# hyperparameters
-train_data_dir = './synthetic_data/'
-test_data_dir = './synthetic_data/'
-lr = 0.05  # learning rate, \eta
-bs = 50  # batch size, b
-le = 30  # local epoch, E
-total_rnd = 100  # total communication rounds, T/E
-sample_ratio = 1  # clients per round, m
+from FedAvg import *
 
-# etamu = 0
+## plot settings
 # color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
+# line styles reference: https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
 c_t = cm.get_cmap('tab10')
-
-# key=key, value=(sel_type, powd, color, linestyle)
-client_selection_type = {
-    'rand': ('rand', 1, 'k', '-'),
-    'powd2': ('pow-d', sample_ratio*2, c_t(3), '-.'),
-    'powd5': ('pow-d', sample_ratio*10, c_t(0), '--'),
-    'adapow30': ('adapow-d', 30, c_t(1), (0, (5, 10)))
-}
-
-# run_keys = ['rand', 'powd2', 'powd5', 'adapow30']
-# run_keys = ['adapow30']
-
-# plot settings
 ftsize = 16
 params = {'legend.fontsize': ftsize,
          'axes.labelsize': ftsize,
@@ -50,67 +27,81 @@ plt.rcParams['axes.labelweight'] = 'bold'
 plt.subplots_adjust(right=1.1, top=0.9)
 rcParams['axes.titlepad'] = 14
 
+## hyperparameters
+train_data_dir = './synthetic_data/'
+test_data_dir = './synthetic_data/'
+lr = 0.05  # learning rate, \eta
+bs = 50  # batch size, b
+le = 30  # local epoch, E
+total_rnd = 800  # total communication rounds, T/E
+sample_ratio = 3  # clients per round, m
+K = 30  # number of clients, K
+
+## experiment configurations
+# key=experiment_id, value=(algo, powd, color, linestyle)
+client_selection_type = {
+    'rand': ('rand', 1, 'k', '-'),
+    'powd2': ('pow-d', sample_ratio*2, c_t(3), '-.'),
+    'powd5': ('pow-d', sample_ratio*10, c_t(0), '--'),
+    'adapow30': ('adapow-d', K, c_t(1), (0, (5, 10)))
+}
+
+# make logs directory if not exist
 if not os.path.exists('./logs'):
     os.makedirs('./logs')
 
-# run experiments
+## run experiments
 for key in client_selection_type.keys():
-    print("running {}".format(key))
+    # set seed for reproducibility
     np.random.seed(12345)
-    # sel_freq = np.zeros(30)  # number of times each client is selected
+
+    # fetch configuration
     algo, powd, color, lstyle = client_selection_type[key]
 
     # run federated learning experiment for given configuration
     opt = FedAvg(lr, bs, le, algo, powd, train_data_dir, test_data_dir, sample_ratio)
     errors, local_errors = list(), list()
-    for rnd in tqdm(range(total_rnd)): 
+    for rnd in tqdm(range(total_rnd), desc=key): 
         # reduce learning rate by half after 300 and 600 rounds
         if rnd == 300 or rnd == 600:
             opt.lr /= 2
 
-        # reduce powd from K to m after half rounds
+        # reduce powd from K to m after half rounds for 'adapow-d'
         if algo == 'adapow-d' and rnd == total_rnd//2:
             opt.powd = sample_ratio
 
-        delta, _ = opt.local_update(local_errors)
-        # for i in workers:
-        #     sel_freq[i]+=1
+        # execute one communication round
+        weights, _ = opt.local_update(local_errors)
 
-        # update central parameter by aggregating deltas
-        opt.aggregate(delta)
+        # update global parameter by aggregating weights
+        opt.aggregate(weights)
 
         # evaluate global and local losses
         error, local_errors = opt.evaluate()
         errors.append(error)
 
-    # save errors to json file
-    with open(f'./logs/m={sample_ratio}_algo={key}_errors.json', 'w') as f:
-        json.dump(errors, f)
+    # # save errors to json file
+    # with open(f'./logs/m={sample_ratio}_algo={key}_errors.json', 'w') as f:
+    #     json.dump(errors, f)
     
-    # # load from json file
+    # # load errors from json file
     # with open(f'./logs/m={sample_ratio}_algo={key}_errors.json') as f:
     #     errors = json.load(f)
-
-    # all_sel_freq.append(sel_freq)
     
-    # plotting pursposes
+    # plot global loss for each configuration
     if algo =='rand' or algo =='adapow-d':
         p_label = algo
     else:
         p_label = algo+', d={}'.format(powd)
-
     plt.plot(errors, lw=lw, color=color, ls = lstyle, label=p_label)
-    # plt.plot(errors, lw=lw, color=color, label=p_label)
 
-print("plotting...")
+# update plot settings
 plt.ylabel('Global loss')
 plt.xlabel('Communication round')
-legend_properties = {'weight':'bold'}
 plt.xticks()
 plt.yticks()
 plt.legend(loc=1)
 plt.grid()
 plt.title('K=30, m={}'.format(sample_ratio))
 # plt.show()
-
 plt.savefig(f'synthetic_m={sample_ratio}.pdf', bbox_inches='tight')

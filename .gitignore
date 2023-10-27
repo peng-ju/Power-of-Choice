@@ -3,3 +3,7 @@
 /models
 synthetic_data/
 __pycache__/
+/env/
+.DS_Store
+*.json
+*.pyc
