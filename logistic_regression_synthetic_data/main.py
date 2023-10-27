@@ -34,7 +34,7 @@ lr = 0.05  # learning rate, \eta
 bs = 50  # batch size, b
 le = 30  # local epoch, E
 total_rnd = 800  # total communication rounds, T/E
-sample_ratio = 3  # clients per round, m
+sample_ratio = 1  # clients per round, m
 K = 30  # number of clients, K
 
 ## experiment configurations
@@ -80,9 +80,9 @@ for key in client_selection_type.keys():
         error, local_errors = opt.evaluate()
         errors.append(error)
 
-    # # save errors to json file
-    # with open(f'./logs/m={sample_ratio}_algo={key}_errors.json', 'w') as f:
-    #     json.dump(errors, f)
+    # save errors to json file
+    with open(f'./logs/m={sample_ratio}_algo={key}_errors.json', 'w') as f:
+        json.dump(errors, f)
     
     # # load errors from json file
     # with open(f'./logs/m={sample_ratio}_algo={key}_errors.json') as f:

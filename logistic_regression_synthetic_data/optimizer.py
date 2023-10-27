@@ -38,7 +38,7 @@ class FederatedOptimizer(object):
         return ratios/total_size
 
     def loss(self, w, i):
-        """ compute loss for logistic model given data X and labels y 
+        """ compute loss for logistic model given weights `w` and data on client `i`
         Ref: https://medium.com/analytics-vidhya/ml-from-scratch-logistic-regression-gradient-descent-63b6beb1664c
         """
         # fetch data for client `i`
@@ -68,7 +68,7 @@ class FederatedOptimizer(object):
         return np.sum(glob_losses), local_losses
     
     def compute_gradient(self, w, i):
-        """ compute gradient for logistic model  given data X and labels y 
+        """ compute gradient for logistic model  given weights `w` and data on client `i`
         Ref: https://medium.com/analytics-vidhya/ml-from-scratch-logistic-regression-gradient-descent-63b6beb1664c
         """
         # fetch data for client `i`
@@ -86,6 +86,7 @@ class FederatedOptimizer(object):
 
         # compute gradient and apply l2-regularization
         grad = - x.T @ (targets - softmax(x @ w))/self.bs
+        import pdb; pdb.set_trace()
         grad[:61] += 10e-4 * self.global_parameter[:61]  # l2-regularization
 
         return grad
