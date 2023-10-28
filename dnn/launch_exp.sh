@@ -18,3 +18,10 @@ pdsh -R ssh -w h0,h1,h2 "python3.5 dnn/train_dnn.py \
                         --rank %n  --backend nccl --initmethod tcp://h0 \
                         --rounds 300 --seed 2 --NIID --print_freq 50"
 
+# command for single machine
+python train_dnn.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 --dataset fmnist --seltype rand \
+    --powd 2 --ensize 100 --fracC 0.03 \
+    --save -p --optimizer fedavg --model MLP \
+    --rounds 300 --seed 2 --NIID --print_freq 50 \
+    --rank 0 --size 1

@@ -7,3 +7,5 @@ __pycache__/
 .DS_Store
 *.json
 *.pyc
+data
+logs

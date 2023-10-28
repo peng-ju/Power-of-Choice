@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import random
 
@@ -10,6 +11,7 @@ import torch.distributed as dist
 import torch.utils.data.distributed
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import torch.multiprocessing as mp
 
 from distoptim import fedavg
 import util_v4 as util
@@ -20,12 +22,15 @@ from params import args_parser
 logging.basicConfig(format='%(levelname)s - %(message)s', level=logging.INFO)
 logging.debug('This message should appear on the console')
 
+# define device
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
 args = args_parser()
 
 def run(rank, size):
 
     # initiate experiments folder
-    save_path = '/users/name/'
+    save_path = './logs/'  # '/users/name/'
     fold = 'lr{:.4f}_bs{}_cp{}_a{:.2f}_e{}_r0_n{}_f{:.2f}/'.format(args.lr, args.bs, args.localE, args.alpha, args.seed,
                                                                    args.ensize, args.fracC)
     if args.commE:
@@ -55,19 +60,19 @@ def run(rank, size):
     # initialization for client selection
     cli_loss, cli_freq, cli_val = np.zeros(args.ensize)+1, np.zeros(args.ensize), np.zeros(args.ensize)
 
-    tmp_cli = [torch.tensor(0, dtype=torch.float32).cuda() for _ in range(dist.get_world_size())]
-    tmp_clifreq = [torch.tensor(0).cuda() for _ in range(dist.get_world_size())]
+    tmp_cli = [torch.tensor(0, dtype=torch.float32).to(device) for _ in range(dist.get_world_size())]
+    tmp_clifreq = [torch.tensor(0).to(device) for _ in range(dist.get_world_size())]
 
     dist.barrier()
     # select client for each round, in total m ranks
-    send = torch.zeros(args.size, dtype=torch.int32).cuda()
+    send = torch.zeros(args.size, dtype=torch.int32).to(device)
     if rank == 0:
         replace_param = False
         if args.seltype =='rand':
             replace_param = True
 
         idxs_users = np.random.choice(args.ensize, size=args.size, replace=replace_param)
-        send = [torch.tensor(int(ii)).cuda() for ii in idxs_users]
+        send = [torch.tensor(int(ii)).to(device) for ii in idxs_users]
     dist.barrier()
 
     for i in range(args.size):
@@ -81,12 +86,12 @@ def run(rank, size):
         len_in *= x
 
     if args.model == 'MLP':
-        model = models.MLP_FMNIST(dim_in=len_in, dim_hidden1=64, dim_hidden2 = 30, dim_out=args.num_classes).cuda()
+        model = models.MLP_FMNIST(dim_in=len_in, dim_hidden1=64, dim_hidden2 = 30, dim_out=args.num_classes).to(device)
 
     elif args.model == 'CNN':
-        model = models.CNNCifar(args).cuda()  # vgg
+        model = models.CNNCifar(args).to(device)  # vgg
 
-    criterion = nn.NLLLoss().cuda()
+    criterion = nn.NLLLoss().to(device)
 
     # select optimizer according to algorithm
     algorithms = {'fedavg': fedavg}
@@ -118,7 +123,7 @@ def run(rank, size):
         comm_update_start = time.time()
         for t in range(local_epochs):
             singlebatch_loader = util.partitiondata_loader(partition, sel_idx, args.bs)
-            loss = train(model, criterion, optimizer, singlebatch_loader, t)
+            loss = train(rank, model, criterion, optimizer, singlebatch_loader, t)
             loss_final += loss/local_epochs
         dist.barrier()
         comm_update_end = time.time()
@@ -126,8 +131,8 @@ def run(rank, size):
 
         # Getting value function for client selection (required only for 'rpow-d', 'afl')
         dist.barrier()      # TODO: implement with multi-arm bandit
-        dist.all_gather(tmp_cli, torch.tensor(loss_final).cuda())
-        dist.all_gather(tmp_clifreq, torch.tensor(int(sel_idx)).cuda())
+        dist.all_gather(tmp_cli, torch.tensor(loss_final).to(device))
+        dist.all_gather(tmp_clifreq, torch.tensor(int(sel_idx)).to(device))
         dist.barrier()
         for i, i_val in enumerate(tmp_clifreq):
             cli_freq[i_val.item()]+= 1         # Cli freq is the entire clients that are selected for all rounds
@@ -155,7 +160,7 @@ def run(rank, size):
 
         dist.barrier()
         # Select client for each round, in total m ranks
-        send = torch.zeros(args.size, dtype=torch.int32).cuda()
+        send = torch.zeros(args.size, dtype=torch.int32).to(device)
         comp_time, sel_time = 0, 0
 
         if rank == 0:
@@ -167,7 +172,7 @@ def run(rank, size):
             if args.seltype == 'pow-d' or args.seltype == 'pow-dint':
                 comp_time = max([cli_comptime[int(i)] for i in rnd_idx])
 
-            send = [torch.tensor(int(ii)).cuda() for ii in idxs_users]
+            send = [torch.tensor(int(ii)).to(device) for ii in idxs_users]
         dist.barrier()
         for i in range(args.size):
             dist.broadcast(tensor=send[i], src=0)
@@ -216,8 +221,8 @@ def evaluate_client(model, criterion, partition):
         with torch.no_grad():
             comptime_start = time.time()
             for batch_idx, (data, target) in enumerate(train_loader):
-                data = data.cuda(non_blocking=True)
-                target = target.cuda(non_blocking=True)
+                data = data.to(device, non_blocking=True)
+                target = target.to(device, non_blocking=True)
                 outputs = model(data)
                 loss = criterion(outputs, target)
                 tmp += loss.item()
@@ -242,8 +247,8 @@ def evaluate(model, test_loader, criterion):
     # Get test accuracy for the current model
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
-            data = data.cuda(non_blocking = True)
-            target = target.cuda(non_blocking = True)
+            data = data.to(device, non_blocking = True)
+            target = target.to(device, non_blocking = True)
 
             # Inference
             outputs = model(data)
@@ -262,7 +267,7 @@ def evaluate(model, test_loader, criterion):
     return acc, los
 
 
-def train(model, criterion, optimizer, loader, epoch):
+def train(rank, model, criterion, optimizer, loader, epoch):
     """
     train model on the sampled mini-batch for $\tau$ epochs
     """
@@ -272,8 +277,8 @@ def train(model, criterion, optimizer, loader, epoch):
 
     for batch_idx, (data, target) in enumerate(loader):
         # data loading
-        data = data.cuda(non_blocking = True)
-        target = target.cuda(non_blocking = True)
+        data = data.to(device, non_blocking = True)
+        target = target.to(device, non_blocking = True)
 
         # forward pass
         output = model(data)
@@ -340,9 +345,12 @@ def update_learning_rate(optimizer, epoch, target_lr):
 
 def init_processes(rank, size, fn):
     """ Initialize the distributed environment. """
-
+    
+    print('rank {} size {}'.format(rank, size))
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '29500'
     dist.init_process_group(backend=args.backend, 
-                            init_method=args.initmethod, 
+                            # init_method=args.initmethod, 
                             rank=rank, 
                             world_size=size)
     fn(rank, size)
@@ -351,5 +359,6 @@ if __name__ == "__main__":
     rank = args.rank
     size = args.size
 
-    init_processes(rank, size, run)
+    mp.spawn(init_processes, args=(size, run), nprocs=size, join=True)
+    # init_processes(rank, size, run)
 

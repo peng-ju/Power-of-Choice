@@ -7,7 +7,7 @@ def args_parser():
                         type=str,
                         help='experiment name, used for saving results')
     parser.add_argument('--backend',
-                        default="nccl",
+                        default="gloo",
                         type=str,
                         help='backend name')
     parser.add_argument('--model',
@@ -55,7 +55,7 @@ def args_parser():
                         type=int,
                         help='print info frequency')
     parser.add_argument('--size',
-                        default=3,
+                        default=1,
                         type=int,
                         help='number of local workers')
     parser.add_argument('--powd',
