@@ -1,11 +1,11 @@
-dvc
-joblib
-notebook
+# dvc
+# joblib
+# notebook
 ipykernel==6.25.2
 numpy==1.26.1
 matplotlib==3.8.0
 tqdm==4.66.1
-torch==2.1.0+cu118
-torchvision==0.16.0+cu118
 pandas==2.1.2
 nltk==3.8.1
+torch --extra-index-url https://download.pytorch.org/whl/cu118
+torchvision --extra-index-url https://download.pytorch.org/whl/cu118
