@@ -20,7 +20,7 @@ def args_parser():
                         help='control the non-iidness of dataset')
     parser.add_argument('--num_classes',
                         type=int,
-                        default=10,
+                        default=2,
                         help='number of classes')
     parser.add_argument('--gmf',
                         default=0,
@@ -71,7 +71,7 @@ def args_parser():
                         type=str,
                         help='type of client selection ($\pi$)')
     parser.add_argument('--ensize',
-                        default=100,
+                        default=314, # 314 100
                         type=int,
                         help='number of all workers')
     parser.add_argument('--rank',

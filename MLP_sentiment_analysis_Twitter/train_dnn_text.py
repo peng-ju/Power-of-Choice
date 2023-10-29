@@ -19,7 +19,8 @@ import models
 from params import args_parser
 
 # define device
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
 
 
 logging.basicConfig(format='%(levelname)s - %(message)s', level=logging.INFO)
@@ -56,6 +57,7 @@ def run(rank, size):
 
     # load data
     partition, train_loader, test_loader, dataratios, traindata = util.partition_dataset(size, args, 0)
+    print("\n dataratios: ", dataratios)
 
     # initialization for client selection
     cli_loss, cli_freq, cli_val = np.zeros(args.ensize)+1, np.zeros(args.ensize), np.zeros(args.ensize)
@@ -212,13 +214,14 @@ def evaluate_client(model, criterion, partition, traindata):
             for batch_idx, (data, target) in enumerate(train_loader):
                 data = data.to(device,non_blocking=True)
                 target = target.to(device,non_blocking=True)
-                # vec_target = vector_encoding(args.num_classes, target)
-                vec_target = target
+                vec_target = vector_encoding(args.num_classes, target)
+                # vec_target = target
 
                 vec_target = vec_target.to(device,non_blocking=True)
                 vec_target = torch.LongTensor(vec_target.type(torch.LongTensor)) # torch.cuda.LongTensor
 
                 outputs = model(data)
+                outputs.to(device)
                 loss = criterion(outputs, vec_target)
                 tmp += loss.item()
                 total += 1
@@ -246,14 +249,15 @@ def evaluate(model, test_loader, criterion):
 
             data = data.to(device,non_blocking=True)
             target = target.to(device,non_blocking=True)
-            # vec_target = vector_encoding(args.num_classes, target)
-            vec_target = target
+            vec_target = vector_encoding(args.num_classes, target)
+            # vec_target = target
             
             vec_target = vec_target.to(device,non_blocking=True)
             vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
 
             # Inference
             outputs = model(data)
+            outputs.to(device)
             batch_loss = criterion(outputs, vec_target)
             loss += batch_loss.item()
 
@@ -280,13 +284,17 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         # data loading
         data = data.to(device,non_blocking = True)
         target = target.to(device,non_blocking = True)
-        # vec_target = vector_encoding(args.num_classes, target)
-        vec_target = target
+        vec_target = vector_encoding(args.num_classes, target)
+        # vec_target = target
 
         vec_target = vec_target.to(device,non_blocking = True)
         vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
-        output = model(data)
-        batch_loss = criterion(output, vec_target)
+        outputs = model(data)
+        outputs.to(device)
+
+        # print("\n outputs: ", outputs)
+        # print("\n vec_target: ", vec_target)
+        batch_loss = criterion(outputs, vec_target)
 
         # backward pass
         batch_loss.backward()
@@ -302,7 +310,7 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         loss += batch_loss.item()
 
         # Prediction
-        _, pred_labels = torch.max(output, 1)
+        _, pred_labels = torch.max(outputs, 1)
         correct += torch.sum(torch.eq(pred_labels, vec_target)).item()/len(pred_labels)
         total += 1
 
@@ -332,17 +340,18 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
 
 
 def vector_encoding(num_class, target):
-    """
-    from number to class vector
+    # """
+    # from number to class vector
     
-    target can be a vector
+    # target can be a vector
     
-    vector_encoding(args.num_classes, target)
-    """
-    vector = torch.zeros((target.size()[0]), num_class)
-    for i in range(len(target)):
-        vector[i, int(target[i])] = 1.0
+    # vector_encoding(args.num_classes, target)
+    # """
+    # vector = torch.zeros((target.size()[0]), num_class)
+    # for i in range(len(target)):
+    #     vector[i, int(target[i])] = 1.0
     
+    vector = torch.Tensor([i.item() for i in target])
     return vector
 
 
