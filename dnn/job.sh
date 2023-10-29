@@ -24,7 +24,7 @@ conda activate powd
 # MEM_PID=$!
 
 ## print logs of HPC ##
-echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX "
+echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
 echo "Hostname="$(/bin/hostname)
 echo "SLURM_SUBMIT_DIR="$SLURM_SUBMIT_DIR
 echo "SLURM_JOBID="$SLURM_JOBID
@@ -33,7 +33,8 @@ echo "SLURM_JOB_NODELIST="$SLURM_JOB_NODELIST
 echo "SLURM_CLUSTER_NAME="$SLURM_CLUSTER_NAME
 echo "SLURM_SUBMIT_HOST="$SLURM_SUBMIT_HOST
 echo "SLURM_JOB_PARTITION="$SLURM_JOB_PARTITION
-echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX "
+echo "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+echo
 
 ## your code ##
 
@@ -47,7 +48,7 @@ python train_dnn.py \
     --powd 2 --ensize 100 --fracC 0.03 \
     --save -p --optimizer fedavg --model MLP \
     --rounds 300 --seed 2 --NIID --print_freq 50 \
-    --rank 0 --size 1 --rounds 50
+    --rank 0 --size 1 --rounds 50 --backend nccl
 
 # ## shut down the resource monitors ##
 # kill -s INT $CPU_PID $MEM_PID
