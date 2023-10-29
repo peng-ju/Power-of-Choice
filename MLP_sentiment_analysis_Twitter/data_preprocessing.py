@@ -61,7 +61,7 @@ def load_twitter_datasets(path_data_train="Sent140/traindata_sent140.csv", # pat
     # original polarity column has values: {0, 2, 4} = {negative, neutral, positive}
     # drop neutral labels in polarity column and divide by 4 to make labels binary
     train = train[train.polarity != 2]
-    train.polarity = train.polarity/2
+    train.polarity = train.polarity/4
 
     # shuffling the rows to obtain val and train subsets
     train = train.sample(frac=1).reset_index(drop=True)
@@ -80,7 +80,7 @@ def load_twitter_datasets(path_data_train="Sent140/traindata_sent140.csv", # pat
     
     # drop neutral labels in polarity column and divide by 4 to make labels binary
     test = test[test.polarity != 2]
-    test.polarity = test.polarity/2
+    test.polarity = test.polarity/4
     test = test[["polarity", "tweet"]]
 
     return train, test, partition, ratios/sum(ratios)
@@ -373,6 +373,8 @@ def partition_datauser(data_users):
     # normalization
     ratios = list(np.array(ratios)/sum(np.array(ratios)))
 
+    # print("print partition:", partition_users)
+    
     return partition_users, ratios, entire
 
 

@@ -43,13 +43,13 @@ class DataPartitioner(object):
 
 def partition_dataset(size, args, rnd):
 
-    if args.dataset == 'twitter':
-
+    if args.dataset == "twitter":
+        print("begin load Glove twitter embedding \n")
         # load GloVe embeddings
         word2vectors, word2id = load_GloVe_twitter_emb()
-
+        print("finish load Glove twitter embedding \n")
         # load the twitter dataset and splits in train/val/test
-        train, test, partition, ratio = load_twitter_datasets(n_train=25000, n_val=8000)
+        train, test, partition, ratio = load_twitter_datasets() # n_train=25000, n_val=8000
         Xtrain, Ytrain = processAllTweets2vec(train, word2vectors)
         Xtest, Ytest = processAllTweets2vec(test, word2vectors)
 
