@@ -6,7 +6,7 @@
 #SBATCH --nodes=1                # node count
 #SBATCH --ntasks=1               # total number of tasks across all nodes
 #SBATCH --cpus-per-task=8        # cpu-cores per task (>1 if multi-threaded tasks)
-#SBATCH --gres=gpu:1             # number of gpus per node
+#SBATCH --gres=gpu:2             # number of gpus per node
 #SBATCH --time=00:05:00          # total run time limit (HH:MM:SS)
 
 ## setup environment ##
@@ -44,11 +44,11 @@ cd ~/scratch_space/Power-of-Choice/dnn
 # capture memory and time footprint
 /usr/bin/time -f "\\n\\nMax CPU Memory: %M KB\\nTime Elapsed: %E sec" \
 python train_dnn.py \
-    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 --dataset fmnist --seltype rand \
-    --powd 2 --ensize 100 --fracC 0.03 \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 --dataset fmnist --seltype pow-d \
+    --powd 6 --ensize 100 --fracC 0.03 \
     --save -p --optimizer fedavg --model MLP \
-    --rounds 300 --seed 2 --NIID --print_freq 50 \
-    --rank 0 --size 1 --rounds 50 --backend nccl
+    --rounds 50 --seed 2 --NIID --print_freq 1 \
+    --rank 0 --size 2 --backend nccl
 
 # ## shut down the resource monitors ##
 # kill -s INT $CPU_PID $MEM_PID
