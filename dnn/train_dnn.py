@@ -108,7 +108,7 @@ def run(rank, size):
 
 
     for rnd in range(args.rounds):
-
+        round_start = time.time()
         # Initialize hyperparameters
         local_epochs = args.localE
         weight = 1/args.size
@@ -180,7 +180,9 @@ def run(rank, size):
         sel_idx = int(send[rank])
 
         # record metrics
-        logging.info("Round {} rank {} test accuracy {:.3f} test loss {:.3f}".format(rnd, rank, test_acc, test_loss))
+        round_end = time.time()
+        round_duration = round(round_end - round_start, 1)
+        logging.info("[{} s] Round {} rank {} test accuracy {:.3f} test loss {:.3f}".format(round_duration, rnd, rank, test_acc, test_loss))
         with open(args.out_fname, '+a') as f:
             print('{ep},{itr},{loss:.4f},{trainloss:.4f},{filler},'
                   '{filler},{filler},'
