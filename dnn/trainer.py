@@ -14,7 +14,7 @@ import torch.backends.cudnn as cudnn
 import torch.multiprocessing as mp
 
 from dist_optimizer import DistOptimizer
-import util_v4 as utils
+import utils
 import models
 
 
@@ -87,9 +87,10 @@ def run(rank, args):
     # initiate log file
     saveFileName = folder_name+file_name
     args.out_fname = saveFileName
+    args_str = [f"{key},{value}" for (key, value) in vars(args).items()]
     with open(args.out_fname, "w+") as f:
-        print("BEGIN-TRAINING\n" "World-Size,{args.world_size}\n" "Batch-Size,{args.bs}\n" "Epoch,itr,"
-            "loss,trainloss,avg:Loss,Prec@1,avg:Prec@1,val,trainval,updtime,comptime,seltime,entime", file=f)
+        print("BEGIN-TRAINING\n" + "\n".join(args_str) + \
+            "\nEpoch,itr,loss,trainloss,avg:Loss,Prec@1,avg:Prec@1,val,trainval,updtime,comptime,seltime,entime", file=f)
 
     # seed for reproducibility
     random.seed(args.seed)
@@ -124,19 +125,19 @@ def run(rank, args):
     criterion = nn.NLLLoss().to(device)
 
     # define optimizer
-    # optimizer = torch.optim.SGD(model.parameters(), 
-    #                             lr=args.lr, 
-    #                             momentum=args.momentum, 
-    #                             nesterov=False,
-    #                             weight_decay=1e-4)
-    optimizer = DistOptimizer(model.parameters(),
-                                lr=args.lr,
-                                gmf=args.gmf, # set to 0
-                                mu = args.mu, # set to 0
-                                ratio=dataratios[rank],
-                                momentum=args.momentum, # set to 0
-                                nesterov = False,
+    optimizer = torch.optim.SGD(model.parameters(), 
+                                lr=args.lr, 
+                                momentum=args.momentum, 
+                                nesterov=False,
                                 weight_decay=1e-4)
+    # optimizer = DistOptimizer(model.parameters(),
+    #                             lr=args.lr,
+    #                             gmf=args.gmf, # set to 0
+    #                             mu = args.mu, # set to 0
+    #                             ratio=dataratios[rank],
+    #                             momentum=args.momentum, # set to 0
+    #                             nesterov = False,
+    #                             weight_decay=1e-4)
 
     # randomly select clients for the first round
     replace_param = False
@@ -220,8 +221,6 @@ def run(rank, args):
         client_loss, client_comptime = evaluate_clients(model, criterion, partitioner)
         train_loss = sum([client_loss[i]*dataratios[i] for i in range(args.num_clients)])
         train_loss1 = sum(client_loss)/args.num_clients
-        if args.algo == "pow-d" or args.algo == "pow-dint":
-            comp_time = max([client_comptime[int(i)] for i in rnd_idx])
 
         # select clients for the next round
         sel_time, comp_time = 0, 0
@@ -230,6 +229,9 @@ def run(rank, args):
         # print(f"len rnd_idx {len(rnd_idx)} idxs_users {len(idxs_users)}")
         sel_time_end = time.time()
         sel_time = sel_time_end - sel_time_start
+
+        if args.algo == "pow-d" or args.algo == "pow-dint":
+            comp_time = max([client_comptime[int(i)] for i in rnd_idx])
 
         # record metrics
         round_end = time.time()
@@ -300,7 +302,6 @@ def evaluate(model, test_loader, criterion):
 
     # Get test accuracy for the current model
     with torch.no_grad():
-        # print("****", type(test_loader))
         for batch_idx, (data, target) in enumerate(test_loader):
             data = data.to(device, non_blocking = True)
             target = target.to(device, non_blocking = True)
@@ -366,12 +367,12 @@ def train(client_idx, model, criterion, optimizer, loader, epoch):
                          .format(epoch, batch_idx, client_idx, los, acc))
 
             with open(args.out_fname, "+a") as f:
-                print("{epoch},{batch_idx},{los:.4f},-1,-1,"
-                      "{acc:.3f},-1,-1,-1,-1,-1,-1", file=f)
+                print(f"{epoch},{batch_idx},{los:.4f},-1,-1,"
+                      f"{acc:.3f},-1,-1,-1,-1,-1,-1", file=f)
 
     with open(args.out_fname, "+a") as f:
-        print("{epoch},{batch_idx},{los:.4f},-1,-1,"
-              "{top1:.3f},-1,-1,-1,-1,-1,-1", file=f)
+        print(f"{epoch},{batch_idx},{los:.4f},-1,-1,"
+              f"{acc:.3f},-1,-1,-1,-1,-1,-1", file=f)
 
     return los
 
@@ -379,7 +380,7 @@ def train(client_idx, model, criterion, optimizer, loader, epoch):
 def init_processes(rank, size, world_size, fn):
     """ Initialize the distributed environment. """
     
-    print("rank {} size {}".format(rank, size))
+    print(f"rank {rank} size {size}")
     dist.init_process_group(backend=args.backend, 
                             init_method=args.initmethod, 
                             rank=rank, 
