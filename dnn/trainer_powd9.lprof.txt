@@ -1,0 +1,271 @@
+Timer unit: 1e-06 s
+
+Total time: 29.2591 s
+File: trainer.py
+Function: run at line 75
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    75                                           @profile
+    76                                           def run(rank, args):
+    77                                               # init logs directory
+    78         1          2.0      2.0      0.0      save_path = "./logs/"
+    79         1          0.0      0.0      0.0      fracC = args.clients_per_round/args.num_clients
+    80         1          5.0      5.0      0.0      fold = f"lr{args.lr:.4f}_bs{args.bs}_cp{args.localE}_a{args.alpha:.2f}_e{args.seed}_r0_n{args.num_clients}_f{fracC:.2f}/"
+    81         1          0.0      0.0      0.0      if args.commE:
+    82                                                   fold = "com_"+fold
+    83         1          0.0      0.0      0.0      folder_name = save_path + args.name + "/" + fold
+    84         7          5.0      0.7      0.0      file_name = f"{args.algo}_rr{args.rnd_ratio:.2f}_dr{args.delete_ratio:.2f}_lr{args.lr:.3f}_bs{args.bs:d}_cp{args.localE:d}"\
+    85         6          0.0      0.0      0.0                      f"_a{args.alpha:.2f}_e{args.seed}_r{rank}_n{args.num_clients}_f{fracC:.2f}_p{args.powd}.csv"
+    86         1         55.0     55.0      0.0      pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
+    87                                           
+    88                                               # initiate log file
+    89         1          0.0      0.0      0.0      saveFileName = folder_name+file_name
+    90         1          0.0      0.0      0.0      args.out_fname = saveFileName
+    91         1         11.0     11.0      0.0      args_str = [f"{key},{value}" for (key, value) in vars(args).items()]
+    92         2       4517.0   2258.5      0.0      with open(args.out_fname, "w+") as f:
+    93         3         14.0      4.7      0.0          print("BEGIN-TRAINING\n" + "\n".join(args_str) + \
+    94         2          0.0      0.0      0.0              "\nEpoch,itr,loss,trainloss,avg:Loss,Prec@1,avg:Prec@1,val,trainval,updtime,comptime,seltime,entime", file=f)
+    95                                           
+    96                                               # seed for reproducibility
+    97         1         18.0     18.0      0.0      random.seed(args.seed)
+    98         1         58.0     58.0      0.0      np.random.seed(args.seed)
+    99         1       1333.0   1333.0      0.0      torch.manual_seed(args.seed)
+   100         1        110.0    110.0      0.0      torch.cuda.manual_seed(args.seed)
+   101         1          7.0      7.0      0.0      torch.backends.cudnn.deterministic = True
+   102                                           
+   103                                               # load data
+   104         1      79689.0  79689.0      0.3      partitioner, dataratios, train_loader, test_loader = utils.partition_dataset(args, rnd=0)
+   105                                           
+   106                                               # tracking client loss values, frequency for each client
+   107         1          5.0      5.0      0.0      client_freq, client_loss_proxy = np.zeros(args.num_clients), np.zeros(args.num_clients)
+   108                                           
+   109                                               # define model
+   110         1         31.0     31.0      0.0      input_dims = np.prod(args.img_size)
+   111         1          0.0      0.0      0.0      if args.model == "MLP":
+   112         1       2286.0   2286.0      0.0          model = models.MLP_FMNIST(dim_in=input_dims, dim_hidden1=64, dim_hidden2 = 30, dim_out=args.num_classes).to(device)
+   113                                               elif args.model == "CNN":
+   114                                                   model = models.CNN_CIFAR(args).to(device)
+   115                                           
+   116                                               # allocate buffer for global and aggregate parameters
+   117                                               # ref: https://discuss.pytorch.org/t/how-to-assign-an-arbitrary-tensor-to-models-parameter/44082/3
+   118         1          0.0      0.0      0.0      global_parameters = []
+   119         1          0.0      0.0      0.0      aggregate_parameters = []
+   120         2          3.0      1.5      0.0      with torch.no_grad():
+   121         7         34.0      4.9      0.0          for param in model.parameters():
+   122         6        173.0     28.8      0.0              global_parameters.append(param.detach().clone())
+   123         6       1133.0    188.8      0.0              aggregate_parameters.append(torch.zeros_like(param))            
+   124                                           
+   125                                               # define loss function
+   126         1         32.0     32.0      0.0      criterion = nn.NLLLoss().to(device)
+   127                                           
+   128                                               # define optimizer
+   129         2         61.0     30.5      0.0      optimizer = torch.optim.SGD(model.parameters(), 
+   130         1          1.0      1.0      0.0                                  lr=args.lr, 
+   131         1          0.0      0.0      0.0                                  momentum=args.momentum, 
+   132         1          0.0      0.0      0.0                                  nesterov=False,
+   133         1          1.0      1.0      0.0                                  weight_decay=1e-4)
+   134                                               # optimizer = DistOptimizer(model.parameters(),
+   135                                               #                             lr=args.lr,
+   136                                               #                             gmf=args.gmf, # set to 0
+   137                                               #                             mu = args.mu, # set to 0
+   138                                               #                             ratio=dataratios[rank],
+   139                                               #                             momentum=args.momentum, # set to 0
+   140                                               #                             nesterov = False,
+   141                                               #                             weight_decay=1e-4)
+   142                                           
+   143                                               # randomly select clients for the first round
+   144         1          0.0      0.0      0.0      replace_param = False
+   145         1          0.0      0.0      0.0      if args.algo =="rand":
+   146                                                   replace_param = True
+   147         1         40.0     40.0      0.0      idxs_users = np.random.choice(args.num_clients, size=args.clients_per_round, replace=replace_param)
+   148                                           
+   149                                               # start communication rounds
+   150         6          4.0      0.7      0.0      for rnd in range(args.rounds):
+   151         5          3.0      0.6      0.0          round_start = time.time()
+   152                                           
+   153                                                   # (optional) decay learning rate according to round index
+   154         5          1.0      0.2      0.0          if args.decay == True:
+   155                                                       # update_learning_rate(optimizer, rnd, args.lr)
+   156         5          2.0      0.4      0.0              if rnd == 149:
+   157                                                           lr = args.lr/2
+   158                                                           logging.info("Updating learning rate to {}".format(lr))
+   159                                                           for param_group in optimizer.param_groups:
+   160                                                               param_group["lr"] = lr
+   161                                           
+   162         5          0.0      0.0      0.0              if rnd == 299:
+   163                                                           lr = args.lr/4
+   164                                                           logging.info("Updating learning rate to {}".format(lr))
+   165                                                           for param_group in optimizer.param_groups:
+   166                                                               param_group["lr"] = lr
+   167                                           
+   168                                                   # zero aggregate parameters for accumulation of local parameters
+   169        10         46.0      4.6      0.0          with torch.no_grad():
+   170        35          9.0      0.3      0.0              for param in aggregate_parameters:
+   171        30        331.0     11.0      0.0                  param.zero_()
+   172                                           
+   173                                                   # for each client `i`
+   174        20          9.0      0.5      0.0          for i in idxs_users:
+   175                                                       # send global parameters to client `i`
+   176        30         63.0      2.1      0.0              with torch.no_grad():
+   177       105        485.0      4.6      0.0                  for param, global_param in zip(model.parameters(), global_parameters):
+   178        90        564.0      6.3      0.0                      param.copy_(global_param)
+   179                                                       
+   180                                                       # run E steps of SGD on client `i`
+   181        15          6.0      0.4      0.0              loss_final = 0
+   182        15          3.0      0.2      0.0              comm_update_start = time.time()
+   183       465         91.0      0.2      0.0              for t in range(args.localE):
+   184       450      44942.0     99.9      0.2                  singlebatch_loader = utils.partitiondata_loader(partitioner, i, args.bs)
+   185       450    2290545.0   5090.1      7.8                  loss = train(i, model, criterion, optimizer, singlebatch_loader, t)  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+   186       450        280.0      0.6      0.0                  loss_final += loss/args.localE
+   187        15         24.0      1.6      0.0              comm_update_end = time.time()
+   188        15          9.0      0.6      0.0              update_time = comm_update_end - comm_update_start
+   189                                           
+   190                                                       # send local parameters from client `i` to server for aggregation
+   191        30        120.0      4.0      0.0              with torch.no_grad():
+   192        15          4.0      0.3      0.0                  weight = 1/args.clients_per_round
+   193       105        458.0      4.4      0.0                  for aggregate_param, param in zip(aggregate_parameters, model.parameters()):
+   194        90        302.0      3.4      0.0                      aggregate_param.add_(param, alpha=weight)
+   195                                                       
+   196                                                       # update client frequency and loss values
+   197        15         69.0      4.6      0.0              client_freq[i] += 1
+   198        15          8.0      0.5      0.0              client_loss_proxy[i] = loss_final
+   199                                           
+   200                                                   # (??) getting value function for client selection (required only for "rpow-d", "afl")
+   201         5        163.0     32.6      0.0          not_visited = np.where(client_freq == 0)[0]
+   202       460         61.0      0.1      0.0          for j in not_visited:
+   203       455         43.0      0.1      0.0              if args.algo == "afl":
+   204                                                           client_loss_proxy[j] = -np.inf
+   205                                                       else:
+   206       455         89.0      0.2      0.0                  client_loss_proxy[j] = np.inf
+   207                                           
+   208                                                   # update global parameters
+   209        10         20.0      2.0      0.0          with torch.no_grad():
+   210        35         14.0      0.4      0.0              for global_param, aggregate_param in zip(global_parameters, aggregate_parameters):
+   211        30        180.0      6.0      0.0                  global_param.copy_(aggregate_param)
+   212                                           
+   213                                                   # set model with global parameters
+   214        10         18.0      1.8      0.0          with torch.no_grad():
+   215        35        140.0      4.0      0.0              for param, global_param in zip(model.parameters(), global_parameters):
+   216        30         81.0      2.7      0.0                  param.copy_(global_param)
+   217                                           
+   218                                                   # evaluate test accuracy
+   219         5    8176442.0    2e+06     27.9          test_acc, test_loss = evaluate(model, test_loader, criterion)  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+   220                                           
+   221                                                   # evaluate loss values and sync selected frequency
+   222         5   18648946.0    4e+06     63.7          client_loss, client_comptime = evaluate_clients(model, criterion, partitioner)  <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+   223         5        151.0     30.2      0.0          train_loss = sum([client_loss[i]*dataratios[i] for i in range(args.num_clients)])
+   224         5          4.0      0.8      0.0          train_loss1 = sum(client_loss)/args.num_clients
+   225                                           
+   226                                                   # select clients for the next round
+   227         5          0.0      0.0      0.0          sel_time, comp_time = 0, 0
+   228         5          0.0      0.0      0.0          sel_time_start = time.time()
+   229         5       2872.0    574.4      0.0          idxs_users, rnd_idx = utils.select_clients(dataratios, client_loss, client_loss_proxy, args, rnd)
+   230                                                   # print(f"len rnd_idx {len(rnd_idx)} idxs_users {len(idxs_users)}")
+   231         5          1.0      0.2      0.0          sel_time_end = time.time()
+   232         5          4.0      0.8      0.0          sel_time = sel_time_end - sel_time_start
+   233                                           
+   234         5          0.0      0.0      0.0          if args.algo == "pow-d" or args.algo == "pow-dint":
+   235         5         19.0      3.8      0.0              comp_time = max([client_comptime[int(i)] for i in rnd_idx])
+   236                                           
+   237                                                   # record metrics
+   238         5          1.0      0.2      0.0          round_end = time.time()
+   239         5         20.0      4.0      0.0          round_duration = round(round_end - round_start, 1)
+   240         5        688.0    137.6      0.0          logging.info(f"[{round_duration} s] Round {rnd} rank {rank} test accuracy {test_acc:.3f} test loss {test_loss:.3f}")
+   241        10       1036.0    103.6      0.0          with open(args.out_fname, "+a") as f:
+   242        30         54.0      1.8      0.0              print(f"{rnd},{-1},{test_loss:.4f},{train_loss:.4f},-1,-1,-1,{test_acc:.4f},{train_loss1:.4f},"
+   243        25          3.0      0.1      0.0                    f"{update_time:.4f},{comp_time:.4f},{sel_time:.4f},{update_time+comp_time+sel_time:.4f}", file=f)
+   244         1          0.0      0.0      0.0      return
+
+Total time: 18.6449 s
+File: trainer.py
+Function: evaluate_clients at line 246
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   246                                           @profile
+   247                                           def evaluate_clients(model, criterion, partition):
+   248                                               """
+   249                                               Evaluate each client on their local train dataset against the current global model
+   250                                           
+   251                                               Evaluating each client"s local loss values for the current global model for client selection
+   252                                               :param model: current global model
+   253                                               :param criterion: loss function
+   254                                               :param partition: dataset dict for clients
+   255                                               :return: cli_loss = list of local loss values, cli_comptime = list of computation time
+   256                                               """
+   257                                           
+   258         5          1.0      0.2      0.0      client_comptime, client_loss = [], []
+   259         5        319.0     63.8      0.0      model.eval()
+   260                                           
+   261                                               # Get data from client to evaluate local loss on
+   262       505        116.0      0.2      0.0      for i in range(args.num_clients):
+   263       500       1574.0      3.1      0.0          partitioned = partition.use(i)
+   264                                           
+   265                                                   # cpow-d
+   266       500        331.0      0.7      0.0          if args.commE:
+   267                                                       # single batch loader
+   268                                                       seldata_idx = random.sample(range(len(partitioned)), k=int(min(args.bs, len(partitioned))))
+   269                                                       partitioned = torch.utils.data.Subset(partitioned, indices=seldata_idx)
+   270                                           
+   271      1000      16120.0     16.1      0.1          train_loader = torch.utils.data.DataLoader(partitioned,
+   272       500        545.0      1.1      0.0                                                     batch_size=len(partitioned),
+   273       500         46.0      0.1      0.0                                                     shuffle=False,
+   274       500         36.0      0.1      0.0                                                     pin_memory=True)
+   275                                           
+   276                                                   # Compute local loss values or proxies for the clients
+   277       500        117.0      0.2      0.0          tmp, total = 0,0
+   278      1000       4446.0      4.4      0.0          with torch.no_grad():
+   279       500        142.0      0.3      0.0              comptime_start = time.time()
+   280      1000   18367075.0  18367.1     98.5              for batch_idx, (data, target) in enumerate(train_loader):
+   281       500       1667.0      3.3      0.0                  data = data.to(device, non_blocking=True)
+   282       500        268.0      0.5      0.0                  target = target.to(device, non_blocking=True)
+   283       500     235128.0    470.3      1.3                  outputs = model(data)
+   284       500      13728.0     27.5      0.1                  loss = criterion(outputs, target)
+   285       500       1558.0      3.1      0.0                  tmp += loss.item()
+   286       500        151.0      0.3      0.0                  total += 1
+   287       500        288.0      0.6      0.0              final_loss = tmp/total
+   288       500        674.0      1.3      0.0              comptime_end = time.time()
+   289       500        431.0      0.9      0.0              client_comptime.append(comptime_end-comptime_start)
+   290       500        100.0      0.2      0.0              client_loss.append(final_loss)
+   291                                           
+   292         5          2.0      0.4      0.0      return client_loss, client_comptime
+
+Total time: 8.1725 s
+File: trainer.py
+Function: evaluate at line 294
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   294                                           @profile
+   295                                           def evaluate(model, test_loader, criterion):
+   296                                               """
+   297                                               Evaluate test accuracy
+   298                                               Evaluate model on full test dataset
+   299                                               """
+   300                                           
+   301         5        148.0     29.6      0.0      model.eval()
+   302         5          2.0      0.4      0.0      loss, total, correct = 0.0, 0.0, 0.0
+   303                                           
+   304                                               # Get test accuracy for the current model
+   305        10         87.0      8.7      0.0      with torch.no_grad():
+   306       790    7973781.0  10093.4     97.6          for batch_idx, (data, target) in enumerate(test_loader):
+   307       785       2878.0      3.7      0.0              data = data.to(device, non_blocking = True)
+   308       785        714.0      0.9      0.0              target = target.to(device, non_blocking = True)
+   309                                           
+   310                                                       # Inference
+   311       785     120511.0    153.5      1.5              outputs = model(data)
+   312       785       9854.0     12.6      0.1              batch_loss = criterion(outputs,target)
+   313       785       1338.0      1.7      0.0              loss += batch_loss.item()
+   314                                           
+   315                                                       # Prediction
+   316       785      43292.0     55.1      0.5              _, pred_labels = torch.max(outputs,1)
+   317       785       3219.0      4.1      0.0              pred_labels = pred_labels.view(-1)
+   318       785      16379.0     20.9      0.2              correct += torch.sum(torch.eq(pred_labels.view(-1), target)).item() / len(pred_labels)
+   319       785        294.0      0.4      0.0              total += 1
+   320                                           
+   321         5          5.0      1.0      0.0          acc = (correct / total) * 100
+   322         5          1.0      0.2      0.0          los = loss/total
+   323                                           
+   324         5          1.0      0.2      0.0      return acc, los
+

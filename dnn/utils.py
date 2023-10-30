@@ -159,7 +159,7 @@ class DataPartitioner(object):
 
         return idx_batch, weights, net_cls_counts, np.sum(local_sizes)
 
-def partition_dataset(args, rnd, num_workers=2):
+def partition_dataset(args, rnd, num_workers=0):
 
     if args.dataset == 'cifar':
         transform_train = transforms.Compose([
@@ -176,6 +176,7 @@ def partition_dataset(args, rnd, num_workers=2):
         train_loader = torch.utils.data.DataLoader(trainset,
                                                batch_size=64,
                                                shuffle=False,
+                                               pin_memory=True,
                                                num_workers=num_workers)
     
         partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
@@ -195,6 +196,7 @@ def partition_dataset(args, rnd, num_workers=2):
         test_loader = torch.utils.data.DataLoader(testset,
                                             batch_size=64, 
                                             shuffle=False, 
+                                            pin_memory=True,
                                             num_workers=num_workers)
 
     elif args.dataset == 'fmnist':
@@ -209,6 +211,7 @@ def partition_dataset(args, rnd, num_workers=2):
         train_loader = torch.utils.data.DataLoader(trainset,
                                                    batch_size=64,
                                                    shuffle=False,
+                                                   pin_memory=True,
                                                    num_workers=num_workers)
 
         partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
@@ -223,6 +226,7 @@ def partition_dataset(args, rnd, num_workers=2):
         test_loader = torch.utils.data.DataLoader(testset,
                                                   batch_size=64,
                                                   shuffle=False,
+                                                  pin_memory=True,
                                                   num_workers=num_workers)
 
     elif args.dataset == 'emnist':
@@ -239,6 +243,7 @@ def partition_dataset(args, rnd, num_workers=2):
         train_loader = torch.utils.data.DataLoader(trainset,
                                                    batch_size=64,
                                                    shuffle=False,
+                                                   pin_memory=True,
                                                    num_workers=num_workers)
 
         partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
@@ -254,6 +259,7 @@ def partition_dataset(args, rnd, num_workers=2):
         test_loader = torch.utils.data.DataLoader(testset,
                                                   batch_size=64,
                                                   shuffle=False,
+                                                  pin_memory=True,
                                                   num_workers=num_workers)
 
     # add more datasets here

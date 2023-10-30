@@ -72,6 +72,7 @@ def args_parser():
     args = parser.parse_args()
     return args
 
+
 def run(rank, args):
     # init logs directory
     save_path = "./logs/"
@@ -270,7 +271,8 @@ def evaluate_clients(model, criterion, partition):
         train_loader = torch.utils.data.DataLoader(partitioned,
                                                    batch_size=len(partitioned),
                                                    shuffle=False,
-                                                   pin_memory=True)
+                                                   pin_memory=False,
+                                                   num_workers=0)
 
         # Compute local loss values or proxies for the clients
         tmp, total = 0,0

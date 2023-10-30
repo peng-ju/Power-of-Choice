@@ -86,3 +86,38 @@ python trainer.py \
     --model MLP --algo pow-d --powd 15 \
     --num_clients 100 --clients_per_round 3 \
     --save -p --rounds 500 --seed 1
+
+# line profiler
+# 1. rand
+python trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo rand \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 5 --seed 1 
+
+kernprof -l trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo rand \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 5 --seed 1 
+
+python -m line_profiler trainer.py.lprof > trainer_rand.lprof.txt
+
+# 2. powd9
+python trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo pow-d --powd 9 \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 5 --seed 1
+
+kernprof -l trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo pow-d --powd 9 \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 5 --seed 1
+
+python -m line_profiler trainer.py.lprof > trainer_powd9.lprof.txt
