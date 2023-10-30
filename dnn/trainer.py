@@ -59,6 +59,7 @@ def args_parser():
 
     # logistics
     parser.add_argument("--print_freq", default=100, type=int, help="print info frequency")
+    parser.add_argument("--num_workers", default=0, type=int, help="number of workers for data loading")
     parser.add_argument("--seed", default=1, type=int, help="random seed")
     parser.add_argument("--save", "-s", action="store_true", help="whether save the training results")
     parser.add_argument("--p", "-p", action="store_true", help="whether the dataset is partitioned or not")
@@ -182,7 +183,7 @@ def run(rank, args):
             comm_update_start = time.time()
             for t in range(args.localE):
                 singlebatch_loader = utils.partitiondata_loader(partitioner, i, args.bs)
-                loss = train(i, model, criterion, optimizer, singlebatch_loader, t)
+                loss = train(i, model, criterion, optimizer, singlebatch_loader, t, args)
                 loss_final += loss/args.localE
             comm_update_end = time.time()
             update_time = comm_update_end - comm_update_start
@@ -219,7 +220,7 @@ def run(rank, args):
         test_acc, test_loss = evaluate(model, test_loader, criterion)
 
         # evaluate loss values and sync selected frequency
-        client_loss, client_comptime = evaluate_clients(model, criterion, partitioner)
+        client_loss, client_comptime = evaluate_clients(model, criterion, partitioner, args)
         train_loss = sum([client_loss[i]*dataratios[i] for i in range(args.num_clients)])
         train_loss1 = sum(client_loss)/args.num_clients
 
@@ -244,7 +245,7 @@ def run(rank, args):
     return
 
 
-def evaluate_clients(model, criterion, partition):
+def evaluate_clients(model, criterion, partition, args):
     """
     Evaluate each client on their local train dataset against the current global model
 
@@ -272,7 +273,7 @@ def evaluate_clients(model, criterion, partition):
                                                    batch_size=len(partitioned),
                                                    shuffle=False,
                                                    pin_memory=False,
-                                                   num_workers=0)
+                                                   num_workers=args.num_workers)
 
         # Compute local loss values or proxies for the clients
         tmp, total = 0,0
@@ -325,7 +326,7 @@ def evaluate(model, test_loader, criterion):
     return acc, los
 
 
-def train(client_idx, model, criterion, optimizer, loader, epoch):
+def train(client_idx, model, criterion, optimizer, loader, epoch, args):
     """
     train model on the sampled mini-batch for $\tau$ epochs
     """

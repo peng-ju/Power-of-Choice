@@ -177,7 +177,7 @@ def partition_dataset(args, rnd, num_workers=0):
                                                batch_size=64,
                                                shuffle=False,
                                                pin_memory=True,
-                                               num_workers=num_workers)
+                                               num_workers=args.num_workers)
     
         partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
         partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
@@ -197,7 +197,7 @@ def partition_dataset(args, rnd, num_workers=0):
                                             batch_size=64, 
                                             shuffle=False, 
                                             pin_memory=True,
-                                            num_workers=num_workers)
+                                            num_workers=args.num_workers)
 
     elif args.dataset == 'fmnist':
         apply_transform = transforms.Compose([
@@ -212,7 +212,7 @@ def partition_dataset(args, rnd, num_workers=0):
                                                    batch_size=64,
                                                    shuffle=False,
                                                    pin_memory=True,
-                                                   num_workers=num_workers)
+                                                   num_workers=args.num_workers)
 
         partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
         partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
@@ -227,7 +227,7 @@ def partition_dataset(args, rnd, num_workers=0):
                                                   batch_size=64,
                                                   shuffle=False,
                                                   pin_memory=True,
-                                                  num_workers=num_workers)
+                                                  num_workers=args.num_workers)
 
     elif args.dataset == 'emnist':
         apply_transform = transforms.Compose([
@@ -244,7 +244,7 @@ def partition_dataset(args, rnd, num_workers=0):
                                                    batch_size=64,
                                                    shuffle=False,
                                                    pin_memory=True,
-                                                   num_workers=num_workers)
+                                                   num_workers=args.num_workers)
 
         partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
         partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
@@ -260,7 +260,7 @@ def partition_dataset(args, rnd, num_workers=0):
                                                   batch_size=64,
                                                   shuffle=False,
                                                   pin_memory=True,
-                                                  num_workers=num_workers)
+                                                  num_workers=args.num_workers)
 
     # add more datasets here
 
