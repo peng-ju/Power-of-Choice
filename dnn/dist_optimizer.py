@@ -1,9 +1,34 @@
 import torch
 import torch.distributed as dist
 from torch.optim.optimizer import Optimizer, required
-from comm_helpers import communicate, flatten_tensors, unflatten_tensors
 
-class fedavg(Optimizer):
+
+def flatten_tensors(tensors):
+    if len(tensors) == 1:
+        return tensors[0].view(-1).clone()
+    flat = torch.cat([t.view(-1) for t in tensors], dim=0)
+    return flat
+
+
+def unflatten_tensors(flat, tensors):
+    outputs = []
+    offset = 0
+    for tensor in tensors:
+        numel = tensor.numel()
+        outputs.append(flat.narrow(0, offset, numel).view_as(tensor))
+        offset += numel
+    return tuple(outputs)
+
+def communicate(tensors, communication_op, attention=False):
+    flat_tensor = flatten_tensors(tensors)
+    communication_op(tensor=flat_tensor)
+    if attention:
+        return tensors/flat_tensor
+    for f, t in zip(unflatten_tensors(flat_tensor, tensors), tensors):
+        t.set_(f)
+
+
+class DistOptimizer(Optimizer):
     r"""Implements stochastic gradient descent for FedAvg."""
 
     def __init__(self, params, ratio, gmf, mu = 0, lr=required, momentum=0, dampening=0,
@@ -25,11 +50,11 @@ class fedavg(Optimizer):
                         weight_decay=weight_decay, nesterov=nesterov, variance=variance)
         if nesterov and (momentum <= 0 or dampening != 0):
             raise ValueError("Nesterov momentum requires a momentum and zero dampening")
-        super(fedavg, self).__init__(params, defaults)
+        super(DistOptimizer, self).__init__(params, defaults)
 
 
     def __setstate__(self, state):
-        super(fedavg, self).__setstate__(state)
+        super(DistOptimizer, self).__setstate__(state)
         for group in self.param_groups:
             group.setdefargs.fracCault('nesterov', False)
 

@@ -295,11 +295,11 @@ def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
     random.seed(args.seed+rnd)
 
     rnd_idx = []
-    if client_loss == [] or args.seltype == 'rand':
+    if client_loss == [] or args.algo == 'rand':
         # random selection in proportion to $p_k$ with replacement
         idxs_users = np.random.choice(args.num_clients, p=data_ratios, size=args.clients_per_round, replace=True)
 
-    elif args.seltype == 'randint':
+    elif args.algo == 'randint':
         # 'rand' for intermittent client availability
         delete = 0.2
         if (rnd % 2) == 0:
@@ -312,7 +312,7 @@ def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
         modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
         idxs_users = np.random.choice(search_idx, p=modified_data_ratios, size=args.clients_per_round, replace=True)
 
-    elif args.seltype == 'pow-d':
+    elif args.algo == 'pow-d':
         # standard power-of-choice strategy
 
         # Step 1: select 'd' clients with probability proportional to their loss without replacement
@@ -326,7 +326,7 @@ def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
         # Step 3: select indices of top 'm' clients from the sorted list
         idxs_users = rep[1][:int(args.clients_per_round)]
 
-    elif args.seltype == 'rpow-d':
+    elif args.algo == 'rpow-d':
         # computation/communication efficient variant of 'pow-d'
 
         # Step 1: select 'd' clients with probability proportional to their loss without replacement
@@ -340,7 +340,7 @@ def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
         # Step 3: select indices of top 'm' clients from the sorted list
         idxs_users = rep[1][:int(args.clients_per_round)]
 
-    elif args.seltype == 'pow-dint':
+    elif args.algo == 'pow-dint':
         # 'pow-d' for intermittent client availability
         delete = 0.2
         if (rnd % 2) == 0:
@@ -358,7 +358,7 @@ def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
         rep = list(zip(*repval))
         idxs_users = rep[1][:int(args.clients_per_round)]
 
-    elif args.seltype == 'rpow-dint':
+    elif args.algo == 'rpow-dint':
         # 'rpow-d' for intermittent client availability
         delete = 0.2
         if (rnd % 2) == 0:
@@ -376,7 +376,7 @@ def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
         rep = list(zip(*repval))
         idxs_users = rep[1][:int(args.clients_per_round)]
 
-    elif args.seltype == 'afl':
+    elif args.algo == 'afl':
         # benchmark strategy
         soft_temp = 0.01
         sorted_loss_idx = np.argsort(client_loss_proxy)
