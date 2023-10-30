@@ -48,7 +48,7 @@ python train_dnn.py \
     --powd 6 --ensize 100 --fracC 0.03 \
     --save -p --optimizer fedavg --model MLP \
     --rounds 50 --seed 2 --NIID --print_freq 1 \
-    --rank 0 --size 2 --backend nccl
+    --rank 0 --size 1 --backend gloo --initmethod tcp://localhost:29500
 
 # ## shut down the resource monitors ##
 # kill -s INT $CPU_PID $MEM_PID

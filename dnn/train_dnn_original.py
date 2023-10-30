@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import random
 
@@ -10,110 +11,145 @@ import torch.distributed as dist
 import torch.utils.data.distributed
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
+import torch.multiprocessing as mp
 
 from distoptim import fedavg
-import util_v4_text as util
+import util_v4 as util
 import models
 from params import args_parser
 
+
 logging.basicConfig(format='%(levelname)s - %(message)s', level=logging.INFO)
 logging.debug('This message should appear on the console')
+
+# define device
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 args = args_parser()
 
 def run(rank, size):
 
     # initiate experiments folder
-    save_path = '/users/name/'
+    save_path = './logs/'  # '/users/name/'
     fold = 'lr{:.4f}_bs{}_cp{}_a{:.2f}_e{}_r0_n{}_f{:.2f}/'.format(args.lr, args.bs, args.localE, args.alpha, args.seed,
-                                                                   args.ensize, args.fracC)
+                                                                   args.num_clients, args.fracC)
     if args.commE:
         fold = 'com_'+fold
     folder_name = save_path+args.name+'/'+fold
     file_name = '{}_rr{:.2f}_dr{:.2f}_lr{:.3f}_bs{:d}_cp{:d}_a{:.2f}_e{}_r{}_n{}_f{:.2f}_p{}.csv'.format(args.seltype,
                                                      args.rnd_ratio, args.delete_ratio, args.lr, args.bs, args.localE,
-                                                    args.alpha, args.seed, rank, args.ensize, args.fracC, args.powd)
+                                                    args.alpha, args.seed, rank, args.num_clients, args.fracC, args.powd)
     pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
 
     # initiate log files
-    saveFileName = folder_name + file_name
+    saveFileName = folder_name+file_name
     args.out_fname = saveFileName
     with open(args.out_fname, 'w+') as f:
         print('BEGIN-TRAINING\n' 'World-Size,{ws}\n' 'Batch-Size,{bs}\n' 'Epoch,itr,'
             'loss,trainloss,avg:Loss,Prec@1,avg:Prec@1,val,trainval,updtime,comptime,seltime,entime'.format(
-            ws=args.size, bs=args.bs), file=f)
+            ws=dist.get_world_size(), bs=args.bs), file=f)
 
     # seed for reproducibility
+    random.seed(args.seed)
+    np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = True
 
     # load data
-    partition, train_loader, test_loader, dataratios, traindata = util.partition_dataset(size, args, 0)
+    partition, train_loader, test_loader, dataratios, datstat, endat = util.partition_dataset(size, args, 0)
 
     # initialization for client selection
-    cli_loss, cli_freq, cli_val = np.zeros(args.ensize)+1, np.zeros(args.ensize), np.zeros(args.ensize)
+    cli_loss, cli_freq, cli_val = np.zeros(args.num_clients)+1, np.zeros(args.num_clients), np.zeros(args.num_clients)
 
-    tmp_cli = [torch.tensor(0, dtype=torch.float32).cuda() for _ in range(dist.get_world_size())]
-    tmp_clifreq = [torch.tensor(0).cuda() for _ in range(dist.get_world_size())]
+    tmp_cli = [torch.tensor(0, dtype=torch.float32).to(device) for _ in range(dist.get_world_size())]
+    tmp_clifreq = [torch.tensor(0).to(device) for _ in range(dist.get_world_size())]
 
     dist.barrier()
-    # select client for each round, in total m ranks
-    send = torch.zeros(args.size, dtype=torch.int32).cuda()
+
+    # randomly select clients for the first round
+    send = torch.zeros(args.size, dtype=torch.int32).to(device)
     if rank == 0:
         replace_param = False
         if args.seltype =='rand':
             replace_param = True
 
-        idxs_users = np.random.choice(args.ensize, size=args.size, replace=replace_param)
-        send = [torch.tensor(int(ii)).cuda() for ii in idxs_users]
+        idxs_users = np.random.choice(args.num_clients, size=args.size, replace=replace_param)
+        # send = [torch.tensor(int(ii)).to(device) for ii in idxs_users]
+        send = torch.tensor(idxs_users).to(device)
     dist.barrier()
 
-    for i in range(args.size):
-        dist.broadcast(tensor=send[i], src=0)
+    dist.broadcast(tensor=send, src=0)
+    # for i in range(args.size):
+    #     dist.broadcast(tensor=send[i], src=0)
     dist.barrier()
+    print('rank {}, send={}'.format(rank, send))
     sel_idx = int(send[rank])
 
-    # define neural nets model, criterion, and optimizer
-    model = models.MLP_text(input_size=200, dim_hidden1=128, dim_hidden2 = 86, dim_hidden3 = 30, dim_out=args.num_classes).cuda()
-    criterion = nn.NLLLoss().cuda()
+    # define neural nets model
+    # len_in = 1
+    # for x in args.img_size:
+    #     len_in *= x
+    len_in = np.prod(args.img_size)
+    # assert len_in == len_in1, 'len_in {} len_in1 {}'.format(len_in, len_in1)
+    if args.model == 'MLP':
+        model = models.MLP_FMNIST(dim_in=len_in, dim_hidden1=64, dim_hidden2 = 30, dim_out=args.num_classes).to(device)
 
-    # select optimizer according to algorithm
-    algorithms = {'fedavg': fedavg}
+    elif args.model == 'CNN':
+        model = models.CNN_CIFAR(args).to(device)  # vgg
 
-    selected_opt = algorithms[args.optimizer]
-    optimizer = selected_opt(model.parameters(),
-                      lr=args.lr,
-                      gmf=args.gmf, # set to 0
-                      mu = args.mu, # set to 0
-                      ratio=dataratios[rank],
-                      momentum=args.momentum, # set to 0
-                      nesterov = False,
-                      weight_decay=1e-4)
+    # define criterion
+    criterion = nn.NLLLoss().to(device)
+
+    # defined optimizer
+    if args.optimizer == 'fedavg':
+        optimizer = fedavg(model.parameters(),
+                        lr=args.lr,
+                        gmf=args.gmf, # set to 0
+                        mu = args.mu, # set to 0
+                        ratio=dataratios[rank],
+                        momentum=args.momentum, # set to 0
+                        nesterov = False,
+                        weight_decay=1e-4)
 
 
     for rnd in range(args.rounds):
-
+        round_start = time.time()
         # Initialize hyperparameters
         local_epochs = args.localE
         weight = 1/args.size
+
+        # (optional) decay learning rate by half after 150 and 300 rounds
+        if args.decay == True:
+            # update_learning_rate(optimizer, rnd, args.lr)
+            if rnd == 149:
+                lr = args.lr/2
+                logging.info('Updating learning rate to {}'.format(lr))
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = lr
+
+            if rnd == 299:
+                lr = args.lr/4
+                logging.info('Updating learning rate to {}'.format(lr))
+                for param_group in optimizer.param_groups:
+                    param_group['lr'] = lr
 
         # Clients locally train for several local epochs
         loss_final = 0
         dist.barrier()
         comm_update_start = time.time()
         for t in range(local_epochs):
-            singlebatch_loader = util.partitiondata_loader(partition, sel_idx, args.bs, traindata)
-            loss = train_text(model, criterion, optimizer, singlebatch_loader, t)
+            singlebatch_loader = util.partitiondata_loader(partition, sel_idx, args.bs)
+            loss = train(rank, model, criterion, optimizer, singlebatch_loader, t)
             loss_final += loss/local_epochs
         dist.barrier()
         comm_update_end = time.time()
         update_time = comm_update_end - comm_update_start
 
         # Getting value function for client selection (required only for 'rpow-d', 'afl')
-        dist.barrier()      # TODO: implement multi-arm bandit
-        dist.all_gather(tmp_cli, torch.tensor(loss_final).cuda())
-        dist.all_gather(tmp_clifreq, torch.tensor(int(sel_idx)).cuda())
+        dist.barrier()      # TODO: implement with multi-arm bandit
+        dist.all_gather(tmp_cli, torch.tensor(loss_final).to(device))
+        dist.all_gather(tmp_clifreq, torch.tensor(int(sel_idx)).to(device))
         dist.barrier()
         for i, i_val in enumerate(tmp_clifreq):
             cli_freq[i_val.item()]+= 1         # Cli freq is the entire clients that are selected for all rounds
@@ -135,34 +171,44 @@ def run(rank, size):
         test_acc, test_loss = evaluate(model, test_loader, criterion)
 
         # evaluate loss values and sync selected frequency
-        cli_loss, cli_comptime = evaluate_client(model, criterion, partition, traindata)
-        train_loss = sum([cli_loss[i]*dataratios[i] for i in range(args.ensize)])
-        train_loss1 = sum(cli_loss)/args.ensize
+        cli_loss, cli_comptime = evaluate_client(model, criterion, partition)
+        train_loss = sum([cli_loss[i]*dataratios[i] for i in range(args.num_clients)])
+        train_loss1 = sum(cli_loss)/args.num_clients
 
         dist.barrier()
-
         # Select client for each round, in total m ranks
-        send = torch.zeros(args.size, dtype=torch.int32).cuda()
+        send = torch.zeros(args.size, dtype=torch.int32).to(device)
+        # send1 = torch.zeros(args.size, dtype=torch.int32).to(device)
         comp_time, sel_time = 0, 0
 
+        # master client runs selection algorithm and sends the selected client index to all other clients
         if rank == 0:
             sel_time_start = time.time()
-            idxs_users, rnd_idx = util.sel_client(dataratios, cli_loss, cli_val, args, rnd)
+            idxs_users, rnd_idx = util.select_clients(dataratios, cli_loss, cli_val, args, rnd)
+            print(f'len rnd_idx {len(rnd_idx)} idxs_users {len(idxs_users)}')
             sel_time_end = time.time()
             sel_time = sel_time_end - sel_time_start
 
             if args.seltype == 'pow-d' or args.seltype == 'pow-dint':
                 comp_time = max([cli_comptime[int(i)] for i in rnd_idx])
 
-            send = [torch.tensor(int(ii)).cuda() for ii in idxs_users]
+            # send = [torch.tensor(int(ii)).to(device) for ii in idxs_users]
+            send = torch.tensor(idxs_users).to(device)
         dist.barrier()
-        for i in range(args.size):
-            dist.broadcast(tensor=send[i], src=0)
+        dist.broadcast(tensor=send, src=0)
+        # for i in range(args.size):
+        #     dist.broadcast(tensor=send[i], src=0)
         dist.barrier()
-        sel_idx = int(send[rank])
+        print('rank {}, send={}'.format(rank, send))
+        # print('rank {}, send1={}'.format(rank, send1))
+        # print(f'{send1.dtype=}, {(send1[0].dtype)=}')
+        # print(f'{(send[0].dtype)=}')
+        sel_idx = int(send[rank])  # selected client index
 
         # record metrics
-        logging.info("Round {} rank {} test accuracy {:.3f} test loss {:.3f}".format(rnd, rank, test_acc, test_loss))
+        round_end = time.time()
+        round_duration = round(round_end - round_start, 1)
+        logging.info("[{} s] Round {} rank {} test accuracy {:.3f} test loss {:.3f}".format(round_duration, rnd, rank, test_acc, test_loss))
         with open(args.out_fname, '+a') as f:
             print('{ep},{itr},{loss:.4f},{trainloss:.4f},{filler},'
                   '{filler},{filler},'
@@ -171,8 +217,7 @@ def run(rank, size):
                           filler=-1, val=test_acc, other=train_loss1, updtime=update_time, comptime=comp_time,
                           seltime=sel_time, entime=update_time+comp_time+sel_time), file=f)
 
-
-def evaluate_client(model, criterion, partition, traindata):
+def evaluate_client(model, criterion, partition):
 
     '''
     Evaluating each client's local loss values for the current global model for client selection
@@ -186,36 +231,30 @@ def evaluate_client(model, criterion, partition, traindata):
     model.eval()
 
     # Get data from client to evaluate local loss on
-    for i in range(args.ensize):
-        partitioned = partition[i]
+    for i in range(args.num_clients):
+        partitioned = partition.use(i)
 
         # cpow-d
         if args.commE:
             seldata_idx = random.sample(range(len(partitioned)), k=int(min(args.bs, len(partitioned))))
-        else:
-            seldata_idx = partitioned
+            partitioned = torch.utils.data.Subset(partitioned, indices=seldata_idx)
 
-        other = torch.utils.data.Subset(traindata, indices=seldata_idx)
-        train_loader = torch.utils.data.DataLoader(other, batch_size=args.bs, shuffle=False,
-                                                    pin_memory=True)
+        train_loader = torch.utils.data.DataLoader(partitioned,
+                                                   batch_size=len(partitioned),
+                                                   shuffle=False,
+                                                   pin_memory=True)
 
         # Compute local loss values or proxies for the clients
         tmp, total = 0,0
         with torch.no_grad():
             comptime_start = time.time()
             for batch_idx, (data, target) in enumerate(train_loader):
-                data = data.cuda(non_blocking=True)
-                target = target.cuda(non_blocking=True)
-                vec_target = vector_encoding(args.num_classes, target)
-
-                vec_target = vec_target.cuda(non_blocking=True)
-                vec_target = torch.cuda.LongTensor(vec_target.type(torch.cuda.LongTensor))
-
+                data = data.to(device, non_blocking=True)
+                target = target.to(device, non_blocking=True)
                 outputs = model(data)
-                loss = criterion(outputs, vec_target)
+                loss = criterion(outputs, target)
                 tmp += loss.item()
                 total += 1
-
             final_loss = tmp/total
             comptime_end = time.time()
             cli_comptime.append(comptime_end-comptime_start)
@@ -225,7 +264,6 @@ def evaluate_client(model, criterion, partition, traindata):
 
 
 def evaluate(model, test_loader, criterion):
-
     """
     Evaluate test accuracy
     """
@@ -236,22 +274,18 @@ def evaluate(model, test_loader, criterion):
     # Get test accuracy for the current model
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
-
-            data = data.cuda(non_blocking=True)
-            target = target.cuda(non_blocking=True)
-            vec_target = vector_encoding(args.num_classes, target)
-
-            vec_target = vec_target.cuda(non_blocking=True)
-            vec_target = torch.cuda.LongTensor(vec_target.type(torch.cuda.LongTensor))
+            data = data.to(device, non_blocking = True)
+            target = target.to(device, non_blocking = True)
 
             # Inference
             outputs = model(data)
-            batch_loss = criterion(outputs, vec_target)
+            batch_loss = criterion(outputs,target)
             loss += batch_loss.item()
 
             # Prediction
             _, pred_labels = torch.max(outputs,1)
-            correct += torch.sum(torch.eq(pred_labels, vec_target)).item() / len(pred_labels)
+            pred_labels = pred_labels.view(-1)
+            correct += torch.sum(torch.eq(pred_labels.view(-1), target)).item() / len(pred_labels)
             total += 1
 
         acc = (correct / total) * 100
@@ -260,7 +294,7 @@ def evaluate(model, test_loader, criterion):
     return acc, los
 
 
-def train_text(model, criterion, optimizer, loader, epoch):
+def train(rank, model, criterion, optimizer, loader, epoch):
     """
     train model on the sampled mini-batch for $\tau$ epochs
     """
@@ -270,14 +304,12 @@ def train_text(model, criterion, optimizer, loader, epoch):
 
     for batch_idx, (data, target) in enumerate(loader):
         # data loading
-        data = data.cuda(non_blocking = True)
-        target = target.cuda(non_blocking = True)
-        vec_target = vector_encoding(args.num_classes, target)
+        data = data.to(device, non_blocking = True)
+        target = target.to(device, non_blocking = True)
 
-        vec_target = vec_target.cuda(non_blocking = True)
-        vec_target = torch.cuda.LongTensor(vec_target.type(torch.cuda.LongTensor))
+        # forward pass
         output = model(data)
-        batch_loss = criterion(output, vec_target)
+        batch_loss = criterion(output, target)
 
         # backward pass
         batch_loss.backward()
@@ -294,7 +326,7 @@ def train_text(model, criterion, optimizer, loader, epoch):
 
         # Prediction
         _, pred_labels = torch.max(output, 1)
-        correct += torch.sum(torch.eq(pred_labels, vec_target)).item()/len(pred_labels)
+        correct += torch.sum(torch.eq(pred_labels.view(-1), target)).item()/len(pred_labels)
         total += 1
 
         acc = (correct / total)*100
@@ -321,19 +353,38 @@ def train_text(model, criterion, optimizer, loader, epoch):
 
     return los
 
+# def update_learning_rate(optimizer, epoch, target_lr):
+#     """
+#     Decay learning rate
+#     ** note: target_lr is the reference learning rate from which to scale down
+#     """
+#     if epoch == 149:
+#         lr = target_lr/2
+#         logging.info('Updating learning rate to {}'.format(lr))
+#         for param_group in optimizer.param_groups:
+#             param_group['lr'] = lr
 
-def init_processes(rank, size, fn):
+#     if epoch == 299:
+#         lr = target_lr/4
+#         logging.info('Updating learning rate to {}'.format(lr))
+#         for param_group in optimizer.param_groups:
+#             param_group['lr'] = lr
+
+def init_processes(rank, size, world_size, fn):
     """ Initialize the distributed environment. """
-
+    
+    print('rank {} size {}'.format(rank, size))
     dist.init_process_group(backend=args.backend, 
                             init_method=args.initmethod, 
                             rank=rank, 
-                            world_size=size)
+                            world_size=world_size)
     fn(rank, size)
 
 if __name__ == "__main__":
     rank = args.rank
     size = args.size
+    world_size = args.world_size
 
-    init_processes(rank, size, run)
+    mp.spawn(init_processes, args=(size, world_size, run), nprocs=world_size, join=True)
+    # init_processes(rank, size, run)
 

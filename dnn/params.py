@@ -24,18 +24,18 @@ def args_parser():
                         default='rand',
                         type=str,
                         help='type of client selection ($\pi$)')
-    parser.add_argument('--fracC',
-                        default=0.03,
-                        type=float,
-                        help='fraction of selected workers per round, $C$')
-    parser.add_argument('--ensize',
+    parser.add_argument('--num_clients',
                         default=100,
                         type=int,
-                        help='number of all workers (Total number of clients, $K$)')
+                        help='total number of clients, $K$')
     parser.add_argument('--rounds',
                         default=500,
                         type=int,
                         help='total communication rounds')
+    parser.add_argument('--clients_per_round',
+                        default=1,
+                        type=int,
+                        help='number of local workers')
     parser.add_argument('--localE',
                         default=30,
                         type=int,
@@ -118,10 +118,10 @@ def args_parser():
                         default="gloo",
                         type=str,
                         help='backend name')
-    parser.add_argument('--size',
+    parser.add_argument('--world_size',
                         default=1,
                         type=int,
-                        help='number of local workers')
+                        help='world size for distributed training')
     parser.add_argument('--rank',
                         default=0,
                         type=int,

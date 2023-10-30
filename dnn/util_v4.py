@@ -13,19 +13,27 @@ from models import *
 class Partition(object):
     """ Dataset-like object, but only access a subset of it. """
 
-    def __init__(self, data, index):
+    def __init__(self, data, indices):
+        """
+        data: full dataset
+        indices: subset of indices of the dataset
+        """
         self.data = data
-        self.index = index
+        self.indices = indices
 
     def __len__(self):
-        return len(self.index)
+        return len(self.indices)
 
-    def __getitem__(self, index):
-        data_idx = self.index[index]
+    def __getitem__(self, indices):
+        data_idx = self.indices[indices]
         return self.data[data_idx]
 
 class DataPartitioner(object):
-    """ Partitions a dataset into different chunks. """
+    """ Partitions a dataset into different chunks/partitions
+    where each partition belongs to that of a client.
+    Partition is basically a list of indices of the dataset.
+    So, partitions is list of partitions where i-th elt is data indices of i-th client.
+    """
     def __init__(self, data, sizes=[0.7, 0.2, 0.1], rnd=0, seed=1234, isNonIID=False, alpha=0,
                  dataset=None, print_f=50):
         self.data = data
@@ -151,7 +159,7 @@ class DataPartitioner(object):
 
         return idx_batch, weights, net_cls_counts, np.sum(local_sizes)
 
-def partition_dataset(size, args, rnd):
+def partition_dataset(args, rnd, num_workers=2):
 
     if args.dataset == 'cifar':
         transform_train = transforms.Compose([
@@ -168,12 +176,12 @@ def partition_dataset(size, args, rnd):
         train_loader = torch.utils.data.DataLoader(trainset,
                                                batch_size=64,
                                                shuffle=False,
-                                               num_workers=size)
+                                               num_workers=num_workers)
     
-        partition_sizes = [1.0 / args.ensize for _ in range(args.ensize)]
-        partition = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
+        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
+        partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
                                     dataset=args.dataset, print_f=args.print_freq)
-        ratio = partition.ratio
+        # ratio = partitions.ratio
 
         transform_test = transforms.Compose([
         transforms.ToTensor(),
@@ -187,7 +195,7 @@ def partition_dataset(size, args, rnd):
         test_loader = torch.utils.data.DataLoader(testset,
                                             batch_size=64, 
                                             shuffle=False, 
-                                            num_workers=size)
+                                            num_workers=num_workers)
 
     elif args.dataset == 'fmnist':
         apply_transform = transforms.Compose([
@@ -201,12 +209,12 @@ def partition_dataset(size, args, rnd):
         train_loader = torch.utils.data.DataLoader(trainset,
                                                    batch_size=64,
                                                    shuffle=False,
-                                                   num_workers=size)
+                                                   num_workers=num_workers)
 
-        partition_sizes = [1.0 / args.ensize for _ in range(args.ensize)]
-        partition = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
+        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
+        partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
                                     dataset=args.dataset, print_f=args.print_freq)
-        ratio = partition.ratio  # Ratio of data sizes
+        # ratio = partitions.ratio  # Ratio of data sizes
 
         testset = torchvision.datasets.FashionMNIST(root='./data',
                                                train=False,
@@ -215,7 +223,7 @@ def partition_dataset(size, args, rnd):
         test_loader = torch.utils.data.DataLoader(testset,
                                                   batch_size=64,
                                                   shuffle=False,
-                                                  num_workers=size)
+                                                  num_workers=num_workers)
 
     elif args.dataset == 'emnist':
         apply_transform = transforms.Compose([
@@ -231,12 +239,12 @@ def partition_dataset(size, args, rnd):
         train_loader = torch.utils.data.DataLoader(trainset,
                                                    batch_size=64,
                                                    shuffle=False,
-                                                   num_workers=size)
+                                                   num_workers=num_workers)
 
-        partition_sizes = [1.0 / args.ensize for _ in range(args.ensize)]
-        partition = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
+        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
+        partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
                                     dataset=args.dataset, print_f=args.print_freq)
-        ratio = partition.ratio  # Ratio of data sizes
+        # ratio = partitions.ratio  # Ratio of data sizes
 
         testset = torchvision.datasets.EMNIST(root='./data',
                                                     split= 'digits',
@@ -246,19 +254,20 @@ def partition_dataset(size, args, rnd):
         test_loader = torch.utils.data.DataLoader(testset,
                                                   batch_size=64,
                                                   shuffle=False,
-                                                  num_workers=size)
+                                                  num_workers=num_workers)
 
     # add more datasets here
 
     args.img_size = trainset[0][0].shape
 
-    return partition, train_loader, test_loader, ratio, partition.dat_stat, partition.endat_size
+    # return partitions, train_loader, test_loader, ratio, partitions.dat_stat, partitions.endat_size
+    return partitioner, partitioner.ratio, train_loader, test_loader
 
-def partitiondata_loader(partition, rank, batch_size):
+def partitiondata_loader(partitioner, rank, batch_size):
     '''
     single mini-batch loader
     '''
-    partition = partition.use(rank)
+    partition = partitioner.use(rank)
 
     data_idx = random.sample(range(len(partition)), k=int(min(batch_size,len(partition))))
     partitioned = torch.utils.data.Subset(partition, indices=data_idx)
@@ -269,10 +278,12 @@ def partitiondata_loader(partition, rank, batch_size):
     return trainbatch_loader
 
 
-def sel_client(DataRatios, cli_loss, cli_val, args, rnd):
+def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
     '''
     Client selection part returning the indices the set $\mathcal{S}$ and $\mathcal{A}$
-    :param DataRatios: $p_k$
+    Assumes that we have the list of local loss values for ALL clients
+
+    :param data_ratios: $p_k$
     :param cli_loss: actual local loss F_k(w)
     :param cli_val: proxy of the local loss
     :param args: variable arguments
@@ -280,102 +291,115 @@ def sel_client(DataRatios, cli_loss, cli_val, args, rnd):
     :return: idxs_users (indices of $\mathcal{S}$), rnd_idx (indices of $\mathcal{A}$)
     '''
     # If reproducibility is needed
-    #rng1 = Random()
-    #rng1.seed(seed)
+    np.random.seed(args.seed+rnd)
+    random.seed(args.seed+rnd)
+
+    # print('len(cli_loss): ', len(cli_loss))
+    # print('len(cli_val): ', len(cli_val))
 
     rnd_idx = []
     if args.seltype == 'rand':
         # random selection in proportion to $p_k$ with replacement
-        idxs_users = np.random.choice(args.ensize, p=DataRatios, size=args.size, replace=True)
+        idxs_users = np.random.choice(args.num_clients, p=data_ratios, size=args.clients_per_round, replace=True)
 
     elif args.seltype == 'randint':
         # 'rand' for intermittent client availability
         delete = 0.2
         if (rnd % 2) == 0:
-            del_idx = np.random.choice(int(args.ensize / 2), size=int(delete * args.ensize / 2), replace=False)
-            search_idx = np.delete(np.arange(0, args.ensize / 2), del_idx)
+            del_idx = np.random.choice(int(args.num_clients/2), size=int(delete*args.num_clients/2), replace=False)
+            search_idx = np.delete(np.arange(0, args.num_clients/2), del_idx)
         else:
-            del_idx = np.random.choice(np.arange(args.ensize / 2, args.ensize), size=int(delete * args.ensize / 2),
-                                       replace=False)
-            search_idx = np.delete(np.arange(args.ensize / 2, args.ensize), del_idx)
+            del_idx = np.random.choice(np.arange(args.num_clients/2, args.num_clients), size=int(delete*args.num_clients/2), replace=False)
+            search_idx = np.delete(np.arange(args.num_clients/2, args.num_clients), del_idx)
 
-        idxs_users = np.random.choice(search_idx, p=[DataRatios[int(i)] for i in search_idx]/sum([DataRatios[int(i)]
-                                                                for i in search_idx]), size=args.size, replace=True)
+        modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
+        idxs_users = np.random.choice(search_idx, p=modified_data_ratios, size=args.clients_per_round, replace=True)
 
     elif args.seltype == 'pow-d':
         # standard power-of-choice strategy
-        rnd_idx = np.random.choice(args.ensize, p=DataRatios, size=args.powd, replace=False)
+
+        # Step 1: select 'd' clients with probability proportional to their loss without replacement
+        rnd_idx = np.random.choice(args.num_clients, p=data_ratios, size=args.powd, replace=False)
+
+        # Step 2: sort the selected clients in descending order of their loss
         repval = list(zip([cli_loss[i] for i in rnd_idx], rnd_idx))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
-        idxs_users = rep[1][:int(args.size)]
+
+        # Step 3: select indices of top 'm' clients from the sorted list
+        idxs_users = rep[1][:int(args.clients_per_round)]
 
     elif args.seltype == 'rpow-d':
         # computation/communication efficient variant of 'pow-d'
-        rnd_idx1 = np.random.choice(args.ensize, p=DataRatios, size=args.powd, replace=False)
+
+        # Step 1: select 'd' clients with probability proportional to their loss without replacement
+        rnd_idx1 = np.random.choice(args.num_clients, p=data_ratios, size=args.powd, replace=False)
+
+        # Step 2: sort the selected clients in descending order of their proxy-loss
         repval = list(zip([cli_val[i] for i in rnd_idx1], rnd_idx1))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
-        idxs_users = rep[1][:int(args.size)]
+
+        # Step 3: select indices of top 'm' clients from the sorted list
+        idxs_users = rep[1][:int(args.clients_per_round)]
 
     elif args.seltype == 'pow-dint':
         # 'pow-d' for intermittent client availability
         delete = 0.2
         if (rnd % 2) == 0:
-            del_idx = np.random.choice(int(args.ensize/2), size=int(delete*args.ensize/2),replace=False)
-            search_idx = list(np.delete(np.arange(0,args.ensize/2), del_idx))
+            del_idx = np.random.choice(int(args.num_clients/2), size=int(delete*args.num_clients/2), replace=False)
+            search_idx = list(np.delete(np.arange(0, args.num_clients/2), del_idx))
         else:
-            del_idx = np.random.choice(np.arange(args.ensize/2, args.ensize), size=int(delete*args.ensize/2),
-                                       replace=False)
-            search_idx = list(np.delete(np.arange(args.ensize/2, args.ensize), del_idx))
+            del_idx = np.random.choice(np.arange(args.num_clients/2, args.num_clients), size=int(delete*args.num_clients/2), replace=False)
+            search_idx = list(np.delete(np.arange(args.num_clients/2, args.num_clients), del_idx))
 
-        rnd_idx = np.random.choice(search_idx, p=[DataRatios[int(i)] for i in search_idx]/sum([DataRatios[int(i)]
-                                                            for i in search_idx]), size=args.powd, replace=False)
+        modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
+        rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=args.powd, replace=False)
 
         repval = list(zip([cli_loss[int(i)] for i in rnd_idx], rnd_idx))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
-        idxs_users = rep[1][:int(args.size)]
+        idxs_users = rep[1][:int(args.clients_per_round)]
 
     elif args.seltype == 'rpow-dint':
         # 'rpow-d' for intermittent client availability
         delete = 0.2
         if (rnd % 2) == 0:
-            del_idx = np.random.choice(int(args.ensize/2), size=int(delete*args.ensize/2),replace=False)
-            search_idx = list(np.delete(np.arange(0,args.ensize/2), del_idx))
+            del_idx = np.random.choice(int(args.num_clients/2), size=int(delete*args.num_clients/2), replace=False)
+            search_idx = list(np.delete(np.arange(0, args.num_clients/2), del_idx))
         else:
-            del_idx = np.random.choice(np.arange(args.ensize/2, args.ensize), size=int(delete*args.ensize/2),
-                                       replace=False)
-            search_idx = list(np.delete(np.arange(args.ensize/2, args.ensize), del_idx))
+            del_idx = np.random.choice(np.arange(args.num_clients/2, args.num_clients), size=int(delete*args.num_clients/2), replace=False)
+            search_idx = list(np.delete(np.arange(args.num_clients/2, args.num_clients), del_idx))
 
-        rnd_idx = np.random.choice(search_idx, p=[DataRatios[int(i)] for i in search_idx]/sum([DataRatios[int(i)]
-                                                            for i in search_idx]), size=args.powd, replace=False)
+        modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
+        rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=args.powd, replace=False)
 
         repval = list(zip([cli_val[int(i)] for i in rnd_idx], rnd_idx))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
-        idxs_users = rep[1][:int(args.size)]
+        idxs_users = rep[1][:int(args.clients_per_round)]
 
     elif args.seltype == 'afl':
         # benchmark strategy
         soft_temp = 0.01
         sorted_loss_idx = np.argsort(cli_val)
 
-        for j in sorted_loss_idx[:int(args.delete_ratio*args.ensize)]:
+        for j in sorted_loss_idx[:int(args.delete_ratio*args.num_clients)]:
             cli_val[j]=-np.inf
 
         loss_prob = np.exp(soft_temp*cli_val)/sum(np.exp(soft_temp*cli_val))
-        idx1 = np.random.choice(int(args.ensize), p=loss_prob, size = int(np.floor((1-args.rnd_ratio)*args.size)),
+        idx1 = np.random.choice(int(args.num_clients), p=loss_prob, size = int(np.floor((1-args.rnd_ratio)*args.clients_per_round)),
                                 replace=False)
 
-        new_idx = np.delete(np.arange(0,args.ensize),idx1)
-        idx2 = np.random.choice(new_idx, size = int(args.size-np.floor((1-args.rnd_ratio)*args.size)), replace=False)
+        new_idx = np.delete(np.arange(0,args.num_clients),idx1)
+        idx2 = np.random.choice(new_idx, size = int(args.clients_per_round-np.floor((1-args.rnd_ratio)*args.clients_per_round)), replace=False)
 
         idxs_users = list(idx1)+list(idx2)
 
 
     return idxs_users, rnd_idx
 
+# not used!!
 def choices(population, weights=None, cum_weights=None, k=1):
     """Return a k sized list of population elements chosen with replacement.
     If the relative weights or cumulative weights are not specified,
@@ -408,6 +432,7 @@ def choices(population, weights=None, cum_weights=None, k=1):
         result.extend(population[bisect(cum_weights, random.random() * total, 0, hi)])
     return result
 
+# not used!!
 class Meter(object):
     """ Computes and stores the average, variance, and current value """
 
