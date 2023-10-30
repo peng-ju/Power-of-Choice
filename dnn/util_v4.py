@@ -278,7 +278,7 @@ def partitiondata_loader(partitioner, rank, batch_size):
     return trainbatch_loader
 
 
-def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
+def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
     '''
     Client selection part returning the indices the set $\mathcal{S}$ and $\mathcal{A}$
     Assumes that we have the list of local loss values for ALL clients
@@ -294,11 +294,8 @@ def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
     np.random.seed(args.seed+rnd)
     random.seed(args.seed+rnd)
 
-    # print('len(cli_loss): ', len(cli_loss))
-    # print('len(cli_val): ', len(cli_val))
-
     rnd_idx = []
-    if args.seltype == 'rand':
+    if client_loss == [] or args.seltype == 'rand':
         # random selection in proportion to $p_k$ with replacement
         idxs_users = np.random.choice(args.num_clients, p=data_ratios, size=args.clients_per_round, replace=True)
 
@@ -322,7 +319,7 @@ def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
         rnd_idx = np.random.choice(args.num_clients, p=data_ratios, size=args.powd, replace=False)
 
         # Step 2: sort the selected clients in descending order of their loss
-        repval = list(zip([cli_loss[i] for i in rnd_idx], rnd_idx))
+        repval = list(zip([client_loss[i] for i in rnd_idx], rnd_idx))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
 
@@ -336,7 +333,7 @@ def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
         rnd_idx1 = np.random.choice(args.num_clients, p=data_ratios, size=args.powd, replace=False)
 
         # Step 2: sort the selected clients in descending order of their proxy-loss
-        repval = list(zip([cli_val[i] for i in rnd_idx1], rnd_idx1))
+        repval = list(zip([client_loss_proxy[i] for i in rnd_idx1], rnd_idx1))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
 
@@ -356,7 +353,7 @@ def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
         modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
         rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=args.powd, replace=False)
 
-        repval = list(zip([cli_loss[int(i)] for i in rnd_idx], rnd_idx))
+        repval = list(zip([client_loss[int(i)] for i in rnd_idx], rnd_idx))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
         idxs_users = rep[1][:int(args.clients_per_round)]
@@ -374,7 +371,7 @@ def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
         modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
         rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=args.powd, replace=False)
 
-        repval = list(zip([cli_val[int(i)] for i in rnd_idx], rnd_idx))
+        repval = list(zip([client_loss_proxy[int(i)] for i in rnd_idx], rnd_idx))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval))
         idxs_users = rep[1][:int(args.clients_per_round)]
@@ -382,12 +379,12 @@ def select_clients(data_ratios, cli_loss, cli_val, args, rnd):
     elif args.seltype == 'afl':
         # benchmark strategy
         soft_temp = 0.01
-        sorted_loss_idx = np.argsort(cli_val)
+        sorted_loss_idx = np.argsort(client_loss_proxy)
 
         for j in sorted_loss_idx[:int(args.delete_ratio*args.num_clients)]:
-            cli_val[j]=-np.inf
+            client_loss_proxy[j]=-np.inf
 
-        loss_prob = np.exp(soft_temp*cli_val)/sum(np.exp(soft_temp*cli_val))
+        loss_prob = np.exp(soft_temp*client_loss_proxy)/sum(np.exp(soft_temp*client_loss_proxy))
         idx1 = np.random.choice(int(args.num_clients), p=loss_prob, size = int(np.floor((1-args.rnd_ratio)*args.clients_per_round)),
                                 replace=False)
 
