@@ -46,8 +46,12 @@ def run(rank, size):
     saveFileName = folder_name + file_name
     args.out_fname = saveFileName
     with open(args.out_fname, 'w+') as f:
-        print('BEGIN-TRAINING\n' 'World-Size,{ws}\n' 'Batch-Size,{bs}\n' 'Epoch,itr,'
-            'loss,trainloss,avg:Loss,Prec@1,avg:Prec@1,val,trainval,updtime,comptime,seltime,entime'.format(
+        # print('BEGIN-TRAINING\n' 'World-Size,{ws}\n' 'Batch-Size,{bs}\n' 'Epoch,itr,'
+        #     'loss,trainloss,avg:Loss,Prec@1,avg:Prec@1,val,trainval,updtime,comptime,seltime,entime,testacc,testloss'.format(
+        #     ws=args.size, bs=args.bs), file=f)
+        
+        print('Epoch,itr,'
+              'loss,trainloss,avg:Loss,Prec@1,avg:Prec@1,val,trainval,updtime,comptime,seltime,entime,testacc,testloss'.format(
             ws=args.size, bs=args.bs), file=f)
 
     # seed for reproducibility
@@ -98,6 +102,11 @@ def run(rank, size):
                       momentum=args.momentum, # set to 0
                       nesterov = False,
                       weight_decay=1e-4)
+
+    test_loss_rnd = []
+    test_accu_rnd = []
+    rank_rnd = []
+    rnd_rnd = []
 
 
     for rnd in range(args.rounds):
@@ -171,13 +180,20 @@ def run(rank, size):
 
         # record metrics
         logging.info("Round {} rank {} test accuracy {:.3f} test loss {:.3f}".format(rnd, rank, test_acc, test_loss))
+        
+        test_loss_rnd.append(test_loss)
+        test_accu_rnd.append(test_acc)
+        rank_rnd.append(rank)
+        rnd_rnd.append(rnd)
+        
         with open(args.out_fname, '+a') as f:
             print('{ep},{itr},{loss:.4f},{trainloss:.4f},{filler},'
                   '{filler},{filler},'
-                  '{val:.4f},{other:.4f},{updtime:.4f},{comptime:.4f},{seltime:.4f},{entime:.4f}'
+                  '{val:.4f},{other:.4f},{updtime:.4f},{comptime:.4f},{seltime:.4f},{entime:.4f}, {testacc:.4f}, {testloss:.4f}'
                   .format(ep=rnd, itr=-1, loss=test_loss, trainloss=train_loss,
                           filler=-1, val=test_acc, other=train_loss1, updtime=update_time, comptime=comp_time,
-                          seltime=sel_time, entime=update_time+comp_time+sel_time), file=f)
+                          seltime=sel_time, entime=update_time+comp_time+sel_time, testacc=test_acc, testloss=test_loss), file=f)
+
 
 
 def evaluate_client(model, criterion, partition, traindata):
@@ -351,7 +367,8 @@ def vector_encoding(num_class, target):
     # for i in range(len(target)):
     #     vector[i, int(target[i])] = 1.0
     
-    vector = torch.Tensor([i.item() for i in target])
+    # 0 for positive, 1 for negative
+    vector = torch.Tensor([1-i.item() for i in target])
     return vector
 
 

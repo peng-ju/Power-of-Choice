@@ -11,23 +11,23 @@ def args_parser():
                         type=str,
                         help='backend name')
     parser.add_argument('--model',
-                        default="MLP",
+                        default="MLP", 
                         type=str,
                         help='neural network model')
     parser.add_argument('--alpha',
-                        default=0.2,
+                        default=0.2, # not needed for tweeter as each clients takes separated user
                         type=float,
                         help='control the non-iidness of dataset')
     parser.add_argument('--num_classes',
                         type=int,
-                        default=2,
+                        default=2, # positve or negative
                         help='number of classes')
     parser.add_argument('--gmf',
                         default=0,
                         type=float,
                         help='global (server) momentum factor')
     parser.add_argument('--lr',
-                        default=0.1,
+                        default=0.05, # learning rate, stated in the paper
                         type=float,
                         help='client learning rate')
     parser.add_argument('--momentum',
@@ -35,15 +35,15 @@ def args_parser():
                         type=float,
                         help='local (client) momentum factor')
     parser.add_argument('--bs',
-                        default=64,
+                        default=32, # batach size, stated in the paper
                         type=int,
                         help='batch size on each worker/client')
     parser.add_argument('--rounds',
-                        default=500,
+                        default=150, # communication rounds from the paper
                         type=int,
                         help='total communication rounds')
     parser.add_argument('--localE',
-                        default=30,
+                        default=100,
                         type=int,
                         help='number of local epochs')
     parser.add_argument('--decay',
@@ -55,23 +55,23 @@ def args_parser():
                         type=int,
                         help='print info frequency')
     parser.add_argument('--size',
-                        default=1, # 3
+                        default=3, # 3, 
                         type=int,
                         help='number of local workers')
     parser.add_argument('--powd',
-                        default=6,
+                        default=50,
                         type=int,
                         help='number of selected subset workers per round ($d$)')
     parser.add_argument('--fracC',
-                        default=0.03,
+                        default=0.1, # faction of 
                         type=float,
                         help='fraction of selected workers per round')
     parser.add_argument('--seltype',
-                        default='rand',
+                        default='rand', # type of the algorithm
                         type=str,
                         help='type of client selection ($\pi$)')
     parser.add_argument('--ensize',
-                        default=314, # 314 100
+                        default=314, # 314 100 number of clients
                         type=int,
                         help='number of all workers')
     parser.add_argument('--rank',
