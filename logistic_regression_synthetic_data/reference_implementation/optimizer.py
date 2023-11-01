@@ -1,5 +1,9 @@
-from utils import read_data
+import sys
 import numpy as np
+
+# add utils.py to system path
+sys.path.append('../')
+from utils import read_data
 
 def softmax(x):
     ex = np.exp(x)
@@ -86,7 +90,7 @@ class FederatedOptimizer(object):
 
         # compute gradient and apply l2-regularization
         grad = - x.T @ (targets - softmax(x @ w))/self.bs
-        import pdb; pdb.set_trace()
+        # import pdb; pdb.set_trace()
         grad[:61] += 10e-4 * self.global_parameter[:61]  # l2-regularization
 
         return grad
