@@ -43,7 +43,7 @@ def args_parser():
                         type=int,
                         help='total communication rounds')
     parser.add_argument('--localE',
-                        default=100,
+                        default=100, # local updates per communication round
                         type=int,
                         help='number of local epochs')
     parser.add_argument('--decay',
@@ -51,15 +51,15 @@ def args_parser():
                         type=bool,
                         help='1: decay LR, 0: no decay')
     parser.add_argument('--print_freq',
-                        default=100,
+                        default=200,
                         type=int,
                         help='print info frequency')
     parser.add_argument('--size',
-                        default=3, # 3, 
+                        default=8, # 3, selected clients for updating the model
                         type=int,
                         help='number of local workers')
     parser.add_argument('--powd',
-                        default=50,
+                        default=32,  # 32
                         type=int,
                         help='number of selected subset workers per round ($d$)')
     parser.add_argument('--fracC',
