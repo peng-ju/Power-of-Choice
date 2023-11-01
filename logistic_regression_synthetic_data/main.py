@@ -7,7 +7,23 @@ from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 
-from FedAvg import *
+from FedAvg import FedAvg
+
+
+## hyperparameters
+train_data_dir = './synthetic_data/'
+test_data_dir = './synthetic_data/'
+lr = 0.05  # learning rate, \eta
+bs = 50  # batch size, b
+le = 30  # local epoch, E
+total_rnd = 800  # total communication rounds, T/E
+clients_per_round = 1  # active clients per round, m
+K = 30  # number of clients, K
+SEED = 12345
+
+## create logs directory if not exist
+if not os.path.exists('./logs'):
+    os.makedirs('./logs')
 
 ## plot settings
 # color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
@@ -27,65 +43,55 @@ plt.rcParams['axes.labelweight'] = 'bold'
 plt.subplots_adjust(right=1.1, top=0.9)
 rcParams['axes.titlepad'] = 14
 
-## hyperparameters
-train_data_dir = './synthetic_data/'
-test_data_dir = './synthetic_data/'
-lr = 0.05  # learning rate, \eta
-bs = 50  # batch size, b
-le = 30  # local epoch, E
-total_rnd = 800  # total communication rounds, T/E
-sample_ratio = 1  # clients per round, m
-K = 30  # number of clients, K
-
 ## experiment configurations
 # key=experiment_id, value=(algo, powd, color, linestyle)
 client_selection_type = {
     'rand': ('rand', 1, 'k', '-'),
-    'powd2': ('pow-d', sample_ratio*2, c_t(3), '-.'),
-    'powd5': ('pow-d', sample_ratio*10, c_t(0), '--'),
+    'powd2': ('pow-d', clients_per_round*2, c_t(3), '-.'),
+    'powd5': ('pow-d', clients_per_round*10, c_t(0), '--'),
     'adapow30': ('adapow-d', K, c_t(1), (0, (5, 10)))
 }
-
-# make logs directory if not exist
-if not os.path.exists('./logs'):
-    os.makedirs('./logs')
 
 ## run experiments
 for key in client_selection_type.keys():
     # set seed for reproducibility
-    np.random.seed(12345)
+    np.random.seed(SEED)
 
     # fetch configuration
     algo, powd, color, lstyle = client_selection_type[key]
 
     # run federated learning experiment for given configuration
-    opt = FedAvg(lr, bs, le, algo, powd, train_data_dir, test_data_dir, sample_ratio)
-    errors, local_errors = list(), list()
+    server = FedAvg(lr, bs, le, algo, powd, train_data_dir, test_data_dir, clients_per_round)
+    errors, local_losses = [], []
     for rnd in tqdm(range(total_rnd), desc=key): 
         # reduce learning rate by half after 300 and 600 rounds
         if rnd == 300 or rnd == 600:
-            opt.lr /= 2
+            for param_group in server.optimizer.param_groups:
+                param_group["lr"] /= 2
 
-        # reduce powd from K to m after half rounds for 'adapow-d'
+        # reduce powd from K to m after half rounds (only for 'adapow-d')
         if algo == 'adapow-d' and rnd == total_rnd//2:
-            opt.powd = sample_ratio
+            server.powd = clients_per_round
 
-        # execute one communication round
-        weights, _ = opt.local_update(local_errors)
+        # find the set of active clients
+        active_clients = server.select_client(local_losses)
+
+        # train active clients locally
+        weights, _ = server.local_update(active_clients)
 
         # update global parameter by aggregating weights
-        opt.aggregate(weights)
+        server.aggregate(weights)
 
         # evaluate global and local losses
-        error, local_errors = opt.evaluate()
-        errors.append(error)
+        global_loss, local_losses = server.evaluate()
+        errors.append(global_loss)
 
     # save errors to json file
-    with open(f'./logs/m={sample_ratio}_algo={key}_errors.json', 'w') as f:
+    with open(f'./logs/m={clients_per_round}_algo={key}_errors.json', 'w') as f:
         json.dump(errors, f)
     
     # # load errors from json file
-    # with open(f'./logs/m={sample_ratio}_algo={key}_errors.json') as f:
+    # with open(f'./logs/m={clients_per_round}_algo={key}_errors.json') as f:
     #     errors = json.load(f)
     
     # plot global loss for each configuration
@@ -102,6 +108,7 @@ plt.xticks()
 plt.yticks()
 plt.legend(loc=1)
 plt.grid()
-plt.title('K=30, m={}'.format(sample_ratio))
+plt.title('K=30, m={}'.format(clients_per_round))
 # plt.show()
-plt.savefig(f'synthetic_m={sample_ratio}.pdf', bbox_inches='tight')
+plt.savefig(f'synthetic_m={clients_per_round}.pdf', bbox_inches='tight')
+print(f'saving plot to synthetic_m={clients_per_round}.pdf')
