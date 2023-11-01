@@ -21,7 +21,7 @@ class FedAvg(object):
         self.ratio = self.get_ratio()  # ratio, p_k for each client k
         self.dim = np.array(self.train_data['f_00000']['x']).shape[1]  # input dimension
 
-        # global params for server
+        # intial global params for server (similar behavior if initialized to random values)
         self.global_parameter = torch.zeros(self.num_classes, self.dim)
         
         # defining the model: here, logistic regression
