@@ -7,14 +7,14 @@ import pathlib
 import logging
 
 import torch
-import torch.distributed as dist
-import torch.utils.data.distributed
 import torch.nn as nn
 import torch.backends.cudnn as cudnn
-import torch.multiprocessing as mp
+# import torch.distributed as dist
+# import torch.utils.data.distributed
+# import torch.multiprocessing as mp
 
 from distoptim import fedavg
-import util_v4_text as util
+import util_text as util
 import models
 from params import args_parser
 
@@ -40,6 +40,7 @@ def run(rank, size):
     file_name = '{}_rr{:.2f}_dr{:.2f}_lr{:.3f}_bs{:d}_cp{:d}_a{:.2f}_e{}_r{}_n{}_f{:.2f}_p{}.csv'.format(args.seltype,
                                                      args.rnd_ratio, args.delete_ratio, args.lr, args.bs, args.localE,
                                                     args.alpha, args.seed, rank, args.ensize, args.fracC, args.powd)
+                                                    
     pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
 
     # initiate log files

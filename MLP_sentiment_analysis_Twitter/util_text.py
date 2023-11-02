@@ -49,7 +49,7 @@ def partition_dataset(size, args, rnd):
         word2vectors, word2id = load_GloVe_twitter_emb()
         print("finish load Glove twitter embedding \n")
         # load the twitter dataset and splits in train/val/test
-        train, test, partition, ratio = load_twitter_datasets() # n_train=25000, n_val=8000
+        train, test, partition, ratio = load_twitter_datasets() # train and test
         Xtrain, Ytrain = processAllTweets2vec(train, word2vectors)
         Xtest, Ytest = processAllTweets2vec(test, word2vectors)
 
@@ -59,8 +59,8 @@ def partition_dataset(size, args, rnd):
         train_data = data_utils.TensorDataset(Xtrain.type(torch.FloatTensor), Ytrain.type(torch.LongTensor))
         test_data = data_utils.TensorDataset(Xtest.type(torch.FloatTensor), Ytest.type(torch.LongTensor))
 
-        train_loader = data_utils.DataLoader(train_data, shuffle=False, batch_size=64, num_workers=size)
-        test_loader = data_utils.DataLoader(test_data, shuffle=False, batch_size=64, num_workers=size)
+        train_loader = data_utils.DataLoader(train_data, shuffle=False, batch_size=64, num_workers=0)
+        test_loader = data_utils.DataLoader(test_data, shuffle=False, batch_size=64, num_workers=0)
 
 
     return partition, train_loader, test_loader, ratio, train_data

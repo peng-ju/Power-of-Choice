@@ -6,6 +6,7 @@ import re
 # import nltk
 from nltk.stem.porter import *
 import logging
+import random
 
 logging.basicConfig(format='%(levelname)s - %(message)s', level=logging.INFO)
 
@@ -83,6 +84,7 @@ def load_twitter_datasets(path_data_train="Sent140/traindata_sent140.csv", # pat
     test.polarity = test.polarity/4
     test = test[["polarity", "tweet"]]
 
+    # partition is the index of the data for clients
     return train, test, partition, ratios/sum(ratios)
 
 
@@ -337,8 +339,14 @@ def processAllTweets2tok(df, word2id, pad_length=40):
 
 def partition_datauser(data_users):
     """
+    partition the data based on user, tweeters from each user serve as the data for a client. 
+
     note: the assumption is data_users is sorted.
     select users with over 80 tweets
+
+    entire: list of index of the data being selected
+    partition_users: tweeter user being selected and its data index
+    ratios: data ratio based on the number of tweeter
     """
     partition_users = {}
     user_idx, dum = 0, []
@@ -352,17 +360,17 @@ def partition_datauser(data_users):
         if user != current_user:
             current_user = user
 
-            if len(dum)>=80:
+            if len(dum)>=32:
                 partition_users[user_idx] = np.arange(count, count+len(dum))
                 count += len(dum)
                 entire.extend(dum)
                 user_idx += 1
 
             dum = []
-
+        # dum stores the index of the data into a list
         dum.append(data_indices[data_idx])
 
-    if len(dum)>=80:
+    if len(dum)>=32:
         partition_users[user_idx] =  np.arange(count, count+len(dum))
         entire.extend(dum)
 
@@ -372,12 +380,25 @@ def partition_datauser(data_users):
 
     # normalization
     ratios = list(np.array(ratios)/sum(np.array(ratios)))
-
     # print("print partition:", partition_users)
     
+    partition_users, ratios, entire = select_314user(partition_users, ratios, entire)
+    # entire is selected data index
     return partition_users, ratios, entire
 
 
+def select_314user(partition_users, ratios, entire):
+    index_select = random.sample(list(partition_users.keys()), 314)
+    partition_users_sel = {}
+    ratios_sel = []
+    entire_sel = []
+    entire = np.array(entire)
 
-        
+    for i, index in enumerate(index_select):
+        partition_users_sel[i] = partition_users[index] + len(entire_sel) - min(partition_users[index])
+        ratios_sel.append(ratios[index])
+        entire_sel.extend(entire[partition_users[index]])
 
+    ratios_sel = ratios_sel/sum(ratios_sel)
+    
+    return partition_users_sel, ratios_sel, entire_sel
