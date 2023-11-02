@@ -11,3 +11,4 @@ data
 logs
 embedding
 slurm-*
+mlruns
