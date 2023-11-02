@@ -59,7 +59,7 @@ class fedavg(Optimizer):
                 d_p = p.grad.data
 
                 if weight_decay != 0:
-                    d_p.add_(weight_decay, p.data)
+                    d_p.add_(p.data, alpha=weight_decay)
                 
                 param_state = self.state[p]
                 if 'old_init' not in param_state:
@@ -73,7 +73,7 @@ class fedavg(Optimizer):
                         buf = param_state['momentum_buffer'] = torch.clone(d_p).detach()
                     else:
                         buf = param_state['momentum_buffer']
-                        buf.mul_(momentum).add_(1 - dampening, d_p)
+                        buf.mul_(momentum).add_(d_p, alpha=1 - dampening)
                     if nesterov:
                         d_p = d_p.add(momentum, buf)
                     else:
@@ -81,16 +81,16 @@ class fedavg(Optimizer):
 
                 # apply proximal updates
                 if self.etamu != 0:
-                    d_p.add_(self.mu, p.data - param_state['old_init'])
+                    d_p.add_(p.data - param_state['old_init'], alpha=self.mu)
 
                 if 'cum_grad' not in param_state:
                     param_state['cum_grad'] = torch.clone(d_p).detach()
                     param_state['cum_grad'].mul_(local_lr)
 
                 else:
-                    param_state['cum_grad'].add_(local_lr, d_p)
+                    param_state['cum_grad'].add_(d_p, alpha=local_lr)
 
-                p.data.add_(-local_lr, d_p)
+                p.data.add_(d_p, alpha=-local_lr)
 
         return loss
 
@@ -116,7 +116,7 @@ class fedavg(Optimizer):
                         buf.div_(lr)
                     else:
                         buf = param_state['global_momentum_buffer']
-                        buf.mul_(self.gmf).add_(1/lr, param_state['cum_grad'])
+                        buf.mul_(self.gmf).add_(param_state['cum_grad'], alpha=1/lr)
                     param_state['old_init'].sub_(lr, buf)
                 else:
                     param_state['old_init'].sub_(param_state['cum_grad'])

@@ -53,7 +53,7 @@ class DataPartitioner(object):
         return Partition(self.data, self.partitions[partition])
 
     def __getNonIIDdata__(self, data, sizes, seed, alpha):
-        labelList = data.train_labels
+        labelList = data.targets
         rng = Random()
         rng.seed(seed)
         a = [(label, idx) for idx, label in enumerate(labelList)]
@@ -108,7 +108,7 @@ class DataPartitioner(object):
     def __getDirichletData__(self, data, psizes, alpha, rnd, print_f):
         n_nets = len(psizes)
         K = 10
-        labelList = np.array(data.train_labels)
+        labelList = np.array(data.targets)
         min_size = 0
         N = len(labelList)
         rann = RandomState(2020)

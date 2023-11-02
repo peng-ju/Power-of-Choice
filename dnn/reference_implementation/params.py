@@ -7,7 +7,7 @@ def args_parser():
                         type=str,
                         help='experiment name, used for saving results')
     parser.add_argument('--backend',
-                        default="nccl",
+                        default="gloo",  # ncll, gloo
                         type=str,
                         help='backend name')
     parser.add_argument('--model',
@@ -15,7 +15,7 @@ def args_parser():
                         type=str,
                         help='neural network model')
     parser.add_argument('--alpha',
-                        default=0.2,
+                        default=2,  # 0.3, 2
                         type=float,
                         help='control the non-iidness of dataset')
     parser.add_argument('--num_classes',
@@ -27,7 +27,7 @@ def args_parser():
                         type=float,
                         help='global (server) momentum factor')
     parser.add_argument('--lr',
-                        default=0.1,
+                        default=0.005,
                         type=float,
                         help='client learning rate')
     parser.add_argument('--momentum',
@@ -39,7 +39,7 @@ def args_parser():
                         type=int,
                         help='batch size on each worker/client')
     parser.add_argument('--rounds',
-                        default=500,
+                        default=100,
                         type=int,
                         help='total communication rounds')
     parser.add_argument('--localE',
@@ -51,7 +51,7 @@ def args_parser():
                         type=bool,
                         help='1: decay LR, 0: no decay')
     parser.add_argument('--print_freq',
-                        default=100,
+                        default=5,
                         type=int,
                         help='print info frequency')
     parser.add_argument('--size',
@@ -67,7 +67,7 @@ def args_parser():
                         type=float,
                         help='fraction of selected workers per round')
     parser.add_argument('--seltype',
-                        default='rand',
+                        default='pow-d',  # rand, pow-d
                         type=str,
                         help='type of client selection ($\pi$)')
     parser.add_argument('--ensize',
@@ -97,21 +97,21 @@ def args_parser():
                         action='store_true',
                         help='whether the dataset is partitioned or not')
     parser.add_argument('--NIID',
-                        action='store_true',
+                        action='store_false',  # TODO
                         help='whether the dataset is non-iid or not')
     parser.add_argument('--commE',
                         action='store_true',
                         help='activation of $cpow-d$')
     parser.add_argument('--constantE',
-                        action='store_true',
+                        action='store_false',  # TODO
                         help='whether all the local workers have an identical \
                         number of local epochs or not')
     parser.add_argument('--optimizer',
-                        default='local',
+                        default='fedavg',
                         type=str,
                         help='optimizer name')
     parser.add_argument('--initmethod',
-                        default='tcp://',
+                        default='tcp://localhost:29500',
                         type=str,
                         help='init method')
     parser.add_argument('--mu',
