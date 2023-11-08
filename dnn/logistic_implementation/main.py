@@ -7,51 +7,13 @@ import argparse
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+c_t = cm.get_cmap('tab10')
 
 from FedAvg import FedAvg
 
-## hyperparameters
-train_data_dir = './synthetic_data/'
-test_data_dir = './synthetic_data/'
-lr = 0.05  # learning rate, \eta
-bs = 50  # batch size, b
-le = 30  # local epoch, E
-total_rnd = 100  # total communication rounds, T/E
-clients_per_round = 3  # active clients per round, m
-K = 30  # number of clients, K
-SEED = 12345
-log_remote = False
 
-## create logs directory if not exist
-if not os.path.exists('./logs'):
-    os.makedirs('./logs')
 
-## plot settings
-# color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
-# line styles reference: https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
-c_t = cm.get_cmap('tab10')
-ftsize = 16
-params = {'legend.fontsize': ftsize,
-         'axes.labelsize': ftsize,
-         'axes.titlesize':ftsize,
-         'xtick.labelsize':ftsize,
-         'ytick.labelsize':ftsize}
-plt.rcParams.update(params)
-lw = 2
-plt.rcParams["font.family"] = "Times New Roman"
-plt.rcParams['axes.labelweight'] = 'bold'
-# plt.figure(figsize=(16,14.5))
-plt.subplots_adjust(right=1.1, top=0.9)
-rcParams['axes.titlepad'] = 14
 
-## experiment configurations
-# key=experiment_id, value=(algo, powd, color, linestyle)
-client_selection_type = {
-    'rand': ('rand', 1, 'k', '-'),
-    'powd2': ('pow-d', clients_per_round*2, c_t(3), '-.'),
-    'powd5': ('pow-d', clients_per_round*10, c_t(0), '--'),
-    # 'adapow30': ('adapow-d', K, c_t(1), (0, (5, 10)))
-}
 
 def args_parser():
     """ parse command line arguments """
@@ -101,51 +63,32 @@ def args_parser():
     args = parser.parse_args()
     return args
 
-def main(args):
-    ## run experiments
+def make_plot(client_selection_type):
+    ## plot settings
+    # color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
+    # line styles reference: https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
+    c_t = cm.get_cmap('tab10')
+    ftsize = 16
+    params = {'legend.fontsize': ftsize,
+            'axes.labelsize': ftsize,
+            'axes.titlesize':ftsize,
+            'xtick.labelsize':ftsize,
+            'ytick.labelsize':ftsize}
+    plt.rcParams.update(params)
+    lw = 2
+    plt.rcParams["font.family"] = "Times New Roman"
+    plt.rcParams['axes.labelweight'] = 'bold'
+    # plt.figure(figsize=(16,14.5))
+    plt.subplots_adjust(right=1.1, top=0.9)
+    rcParams['axes.titlepad'] = 14
+
     for key in client_selection_type.keys():
-        # set seed for reproducibility
-        np.random.seed(SEED)
-
         # fetch configuration
-        algo, powd, color, lstyle = client_selection_type[key]
+        algo, clients_per_round, powd, color, lstyle = client_selection_type[key]
 
-        # run federated learning experiment for given configuration
-        server = FedAvg(lr, bs, le, algo, powd, train_data_dir, test_data_dir, clients_per_round)
-        errors, local_losses = [], []
-        for rnd in tqdm(range(total_rnd), desc=key): 
-            # (optional) decay learning rate according to round index
-            # reduce learning rate by half after 300 and 600 rounds
-            if args.decay == True:
-                # update_learning_rate(optimizer, rnd, args.lr)
-                if rnd == 300 or rnd == 600:
-                    for param_group in server.optimizer.param_groups:
-                        param_group["lr"] /= 2
-                        
-            # reduce powd from K to m after half rounds (only for 'adapow-d')
-            if algo == 'adapow-d' and rnd == total_rnd//2:
-                server.powd = clients_per_round
-
-            # find the set of active clients
-            active_clients = server.select_client(local_losses)
-
-            # train active clients locally
-            weights, _ = server.local_update(active_clients)
-
-            # update global parameter by aggregating weights
-            server.aggregate(weights)
-
-            # evaluate global and local losses
-            global_loss, local_losses = server.evaluate()
-            errors.append(global_loss)
-
-        # save errors to json file
-        with open(f'./logs/m={clients_per_round}_algo={key}_errors.json', 'w') as f:
-            json.dump(errors, f)
-        
-        # # load errors from json file
-        # with open(f'./logs/m={clients_per_round}_algo={key}_errors.json') as f:
-        #     errors = json.load(f)
+        # load errors from json file
+        with open(f'./logs/m={clients_per_round}_algo={key}_errors.json') as f:
+            errors = json.load(f)
         
         # plot global loss for each configuration
         if algo =='rand' or algo =='adapow-d':
@@ -165,7 +108,83 @@ def main(args):
     # plt.show()
     plt.savefig(f'synthetic_m={clients_per_round}.pdf', bbox_inches='tight')
     print(f'saving plot to synthetic_m={clients_per_round}.pdf')
+    
+    return
+
+def main(args):
+    ## create logs directory if not exist
+    if not os.path.exists('./logs'):
+        os.makedirs('./logs')
+
+    # set seed for reproducibility
+    np.random.seed(args.seed)
+
+    # run federated learning experiment for given configuration
+    server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.powd, train_data_dir, test_data_dir, args.clients_per_round)
+    errors, local_losses = [], []
+    for rnd in tqdm(range(args.rounds), desc=key): 
+        # (optional) decay learning rate according to round index
+        # reduce learning rate by half after 300 and 600 rounds
+        if args.decay == True:
+            # update_learning_rate(optimizer, rnd, args.lr)
+            if rnd == 300 or rnd == 600:
+                for param_group in server.optimizer.param_groups:
+                    param_group["lr"] /= 2
+                    
+        # reduce powd from K to m after half rounds (only for 'adapow-d')
+        if algo == 'adapow-d' and rnd == args.rounds//2:
+            server.powd = args.clients_per_round
+
+        # find the set of active clients
+        active_clients = server.select_client(local_losses)
+
+        # train active clients locally
+        weights, _ = server.local_update(active_clients)
+
+        # update global parameter by aggregating weights
+        server.aggregate(weights)
+
+        # evaluate global and local losses
+        global_loss, local_losses = server.evaluate()
+        errors.append(global_loss)
+
+    # save errors to json file
+    with open(f'./logs/m={args.clients_per_round}_algo={key}_errors.json', 'w') as f:
+        json.dump(errors, f)
+        
+    return 
 
 if __name__ == '__main__':
     args = args_parser()
-    main(args)
+
+    ## hyperparameters
+    train_data_dir = './synthetic_data/'
+    test_data_dir = './synthetic_data/'
+    args.lr = 0.05  # learning rate, \eta
+    args.bs = 50  # batch size, b
+    args.localE = 30  # local epoch, E
+    args.rounds = 100  # total communication rounds, T/E
+    args.clients_per_round = 1  # active clients per round, m
+    args.num_clients = 30  # number of clients, K
+    args.seed = 12345
+    log_remote = False
+
+    ## experiment configurations
+    # key=experiment_id, value=(algo, powd, color, linestyle)
+    client_selection_type = {
+        'rand': ('rand', args.clients_per_round, 1, 'k', '-'),
+        'powd2': ('pow-d', args.clients_per_round, args.clients_per_round*2, c_t(3), '-.'),
+        'powd5': ('pow-d', args.clients_per_round, args.clients_per_round*10, c_t(0), '--'),
+        # 'adapow30': ('adapow-d', args.clients_per_round, K, c_t(1), (0, (5, 10)))
+    }
+
+    ## run experiments
+    for key in client_selection_type.keys():
+        # fetch configuration
+        algo, clients_per_round, powd, color, lstyle = client_selection_type[key]
+
+        args.algo = algo
+        args.powd = powd
+        main(args)
+
+    make_plot(client_selection_type)
