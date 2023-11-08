@@ -2,10 +2,13 @@ import os
 import json
 from tqdm import tqdm
 import argparse
-import numpy as np
 import random
 import logging
 import time
+import pathlib
+
+import numpy as np
+import pandas as pd
 
 import torch
 import torch.distributed as dist
@@ -70,7 +73,7 @@ def args_parser():
     args = parser.parse_args()
     return args
 
-def make_plot(client_selection_type):
+def make_plot(client_selection_type, logs, metric='train_loss'):
     ## plot settings
     # color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
     # line styles reference: https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
@@ -85,16 +88,17 @@ def make_plot(client_selection_type):
     plt.rcParams["font.family"] = "Times New Roman"
     plt.rcParams['axes.labelweight'] = 'bold'
     # plt.figure(figsize=(16,14.5))
+    plt.figure()
     plt.subplots_adjust(right=1.1, top=0.9)
     rcParams['axes.titlepad'] = 14
 
-    for key in client_selection_type.keys():
+    for key, log_filename in zip(client_selection_type.keys(), logs):
         # fetch configuration
         algo, clients_per_round, powd, color, lstyle = client_selection_type[key]
 
         # load errors from json file
-        with open(f'./logs/m={clients_per_round}_algo={key}_errors.json') as f:
-            errors = json.load(f)
+        df = pd.read_csv(log_filename, skiprows=range(34))  # dataframe starts from row 35
+        errors = df[df['epoch'] == -1][['round', metric]].sort_values(['round'])[metric].tolist()
         
         # plot global loss for each configuration
         if algo =='rand' or algo =='adapow-d':
@@ -112,15 +116,29 @@ def make_plot(client_selection_type):
     plt.grid()
     plt.title('K=30, m={}'.format(clients_per_round))
     # plt.show()
-    plt.savefig(f'synthetic_m={clients_per_round}.pdf', bbox_inches='tight')
-    print(f'saving plot to synthetic_m={clients_per_round}.pdf')
+    plot_filename = f'synthetic_m{clients_per_round}_{metric}.pdf'
+    plt.savefig(plot_filename, bbox_inches='tight')
+    print(f'saving plot to {plot_filename}')
     
     return
 
-def run(args):
-    ## create logs directory if not exist
-    if not os.path.exists('./logs'):
-        os.makedirs('./logs')
+def run(rank, args):
+    # init logs directory
+    save_path = "./logs/"
+    fracC = args.clients_per_round/args.num_clients
+    fold = f"lr{args.lr:.4f}_bs{args.bs}_cp{args.localE}_a{args.alpha:.2f}_e{args.seed}_r0_n{args.num_clients}_f{fracC:.2f}/"
+    if args.commE:
+        fold = "com_"+fold
+    folder_name = save_path + args.name + "/" + fold
+    file_name = f"{args.algo}_rr{args.rnd_ratio:.2f}_dr{args.delete_ratio:.2f}_p{args.powd}_r{rank}.csv"
+    pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
+
+    # initiate log file
+    args.out_fname = folder_name + file_name
+    args_str = [f"{key},{value}" for (key, value) in vars(args).items()]
+    with open(args.out_fname, "w+") as f:
+        print("BEGIN-TRAINING\n" + "\n".join(args_str) + "\n" \
+            "round,epoch,test_loss,train_loss,test_acc,train_acc", file=f)
 
     logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
     logging.info("This message should appear on the console")
@@ -167,8 +185,8 @@ def run(args):
         server.set_params(server.global_parameters)
 
         # evaluation
-        global_loss_train, local_losses_train, local_accuracies_train, client_comp_times_train = server.evaluate('train')
-        global_loss_test, local_losses_test, local_accuracies_test, client_comp_times_test = server.evaluate('test')
+        global_loss_train, global_acc_train, local_losses_train, local_accuracies_train, client_comp_times_train = server.evaluate('train')
+        global_loss_test, global_acc_test, local_losses_test, local_accuracies_test, client_comp_times_test = server.evaluate('test')
         errors.append(global_loss_train)
 
         ## bookkeeping
@@ -193,13 +211,14 @@ def run(args):
         round_end = time.time()
         round_duration = round(round_end - round_start, 1)
         if round_duration > 1:
-            logging.info(f"[{round_duration} s] Round {rnd} ") #rank {rank} test accuracy {test_acc:.3f} test loss {test_loss:.3f}")
+            logging.info(f"[{round_duration} s] Round {rnd} rank {rank} test accuracy {global_acc_test:.3f} test loss {global_loss_train:.3f}")
 
-    # save errors to json file
-    with open(f'./logs/m={args.clients_per_round}_algo={key}_errors.json', 'w') as f:
-        json.dump(errors, f)
-        
-    return 
+        with open(args.out_fname, "+a") as f:
+            # round,epoch,test_loss,train_loss,test_acc,train_acc
+            print(f"{rnd},{-1},{global_loss_test:.4f},{global_loss_train:.4f},{global_acc_test:.4f},{global_acc_train:.4f}", file=f)
+    
+    print(f"Saving logs to {args.out_fname}")
+    return args.out_fname
 
 if __name__ == '__main__':
     args = args_parser()
@@ -231,12 +250,18 @@ if __name__ == '__main__':
     args.device = device
 
     ## run experiments
+    logs = []
     for key in client_selection_type.keys():
         # fetch configuration
         algo, clients_per_round, powd, color, lstyle = client_selection_type[key]
 
         args.algo = algo
         args.powd = powd
-        run(args)
+        tmp_filename = run(0, args)
+        logs.append(tmp_filename)
 
-    make_plot(client_selection_type)
+    ## plot results
+    make_plot(client_selection_type, logs, 'train_loss')
+    make_plot(client_selection_type, logs, 'test_loss')
+    make_plot(client_selection_type, logs, 'train_acc')
+    make_plot(client_selection_type, logs, 'test_acc')

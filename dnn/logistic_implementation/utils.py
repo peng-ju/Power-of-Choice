@@ -21,7 +21,7 @@ def read_data(train_data_dir, test_data_dir):
     test_data = {}
 
     train_files = os.listdir(train_data_dir)
-    train_files = [f for f in train_files if f.endswith('.json')]
+    train_files = [f for f in train_files if f.endswith('train.json')]
     for f in train_files:
         file_path = os.path.join(train_data_dir,f)
         with open(file_path, 'r') as inf:
@@ -32,7 +32,7 @@ def read_data(train_data_dir, test_data_dir):
         train_data.update(cdata['user_data'])
 
     test_files = os.listdir(test_data_dir)
-    test_files = [f for f in test_files if f.endswith('.json')]
+    test_files = [f for f in test_files if f.endswith('test.json')]
     for f in test_files:
         file_path = os.path.join(test_data_dir,f)
         with open(file_path, 'r') as inf:

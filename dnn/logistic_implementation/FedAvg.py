@@ -75,12 +75,9 @@ class FedAvg(object):
 
         # fetch data for client `i`
         uname = 'f_{0:05d}'.format(i)
-        if data == 'test':
-            X = torch.tensor(self.test_data[uname]['x'], dtype=torch.float32)
-            y = torch.tensor(self.test_data[uname]['y'], dtype=torch.int64)
-        else:
-            X = torch.tensor(self.train_data[uname]['x'], dtype=torch.float32)
-            y = torch.tensor(self.train_data[uname]['y'], dtype=torch.int64)
+        data = self.test_data if data == 'test' else self.train_data
+        X = torch.tensor(data[uname]['x'], dtype=torch.float32)
+        y = torch.tensor(data[uname]['y'], dtype=torch.int64)
 
         with torch.no_grad():
             # foward pass
@@ -104,6 +101,7 @@ class FedAvg(object):
         global loss: average of all local client losses weighted by ratio p_k
         """
         global_loss = 0
+        global_acc = 0
         local_losses = []
         client_comptime = []
         local_acc = []
@@ -114,10 +112,11 @@ class FedAvg(object):
             loss, acc = self.eval(i, data)
             client_comptime.append(time.time() - comptime_start)
             global_loss += loss * self.ratio[i]
+            global_acc += acc * self.ratio[i]
             local_losses.append(loss)
             local_acc.append(acc)
 
-        return global_loss, local_losses, local_acc, client_comptime
+        return global_loss, global_acc, local_losses, local_acc, client_comptime
 
     def train(self, i):
         """ compute loss, acc for client `i` on train data and run optimizer step """
