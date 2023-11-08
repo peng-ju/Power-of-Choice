@@ -1,8 +1,17 @@
 import os
 import json
 from tqdm import tqdm
-import numpy as np
 import argparse
+import numpy as np
+import random
+import logging
+
+import torch
+import torch.distributed as dist
+import torch.utils.data.distributed
+import torch.nn as nn
+import torch.backends.cudnn as cudnn
+import torch.multiprocessing as mp
 
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
@@ -10,9 +19,6 @@ import matplotlib.cm as cm
 c_t = cm.get_cmap('tab10')
 
 from FedAvg import FedAvg
-
-
-
 
 
 def args_parser():
@@ -67,7 +73,6 @@ def make_plot(client_selection_type):
     ## plot settings
     # color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
     # line styles reference: https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
-    c_t = cm.get_cmap('tab10')
     ftsize = 16
     params = {'legend.fontsize': ftsize,
             'axes.labelsize': ftsize,
@@ -116,11 +121,19 @@ def main(args):
     if not os.path.exists('./logs'):
         os.makedirs('./logs')
 
+    logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
+    logging.info("This message should appear on the console")
+
     # set seed for reproducibility
+    random.seed(args.seed)
     np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    torch.backends.cudnn.deterministic = True
 
     # run federated learning experiment for given configuration
-    server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.powd, train_data_dir, test_data_dir, args.clients_per_round)
+    server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.powd, args.num_clients,
+                    args.clients_per_round, train_data_dir, test_data_dir, args.num_classes, args.device)
     errors, local_losses = [], []
     for rnd in tqdm(range(args.rounds), desc=key): 
         # (optional) decay learning rate according to round index
@@ -136,7 +149,7 @@ def main(args):
             server.powd = args.clients_per_round
 
         # find the set of active clients
-        active_clients = server.select_client(local_losses)
+        active_clients, rnd_idx = server.select_clients(local_losses, None, args, rnd)
 
         # train active clients locally
         weights, _ = server.local_update(active_clients)
@@ -177,6 +190,11 @@ if __name__ == '__main__':
         'powd5': ('pow-d', args.clients_per_round, args.clients_per_round*10, c_t(0), '--'),
         # 'adapow30': ('adapow-d', args.clients_per_round, K, c_t(1), (0, (5, 10)))
     }
+
+    # define device
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # print(f"Using device: {device}")
+    args.device = device
 
     ## run experiments
     for key in client_selection_type.keys():

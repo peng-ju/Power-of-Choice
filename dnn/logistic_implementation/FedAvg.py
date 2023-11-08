@@ -1,10 +1,11 @@
+import logging
 import numpy as np
 import torch
 
 from utils import read_data
 
 class FedAvg(object):
-    def __init__(self, lr, bs, le, algo, powd, train_data_dir, test_data_dir, sample_ratio, num_classes=10, device=None):
+    def __init__(self, lr, bs, le, algo, powd, num_clients, clients_per_round, train_data_dir, test_data_dir, num_classes, device=None):
         """ initialize federated optimizer """
         # hyperparameters
         self.lr = lr  # learning rate
@@ -12,12 +13,13 @@ class FedAvg(object):
         self.le = le  # local epochs
         self.algo = algo  # client selection algorithm
         self.powd = powd  # d (power of choice param)
-        self.sample_ratio = sample_ratio  # clients per round, m
+        self.clients_per_round = clients_per_round  # clients per round, m
         self.num_classes = num_classes  # number of classes in the dataset
+        self.device = device
 
         # read data
         _, _, self.train_data, self.test_data = read_data(train_data_dir, test_data_dir)
-        self.num_clients = len(self.train_data.keys())  # number of clients, K
+        self.num_clients = num_clients  # len(self.train_data.keys())  # number of clients, K
         self.ratio = self.get_ratio()  # ratio, p_k for each client k
         self.dim = np.array(self.train_data['f_00000']['x']).shape[1]  # input dimension
         
@@ -161,27 +163,120 @@ class FedAvg(object):
                 global_param.div_(len(client_params))
 
 
-    def select_client(self, loc_loss):
-        """ client selection strategy for each round of communication """
-        if not loc_loss:
+    def select_clients(self, client_loss, client_loss_proxy, args, rnd):
+        '''
+        Client selection part returning the indices the set $\mathcal{S}$ and $\mathcal{A}$
+        Assumes that we have the list of local loss values for ALL clients
+
+        :param data_ratios: $p_k$
+        :param cli_loss: actual local loss F_k(w)
+        :param cli_val: proxy of the local loss
+        :param args: variable arguments
+        :param rnd: communication round index
+        :return: idxs_users (indices of $\mathcal{S}$), rnd_idx (indices of $\mathcal{A}$)
+        '''
+        rnd_idx = []
+        if client_loss == []:
             # For the first round, select 'm' clients uniformly at random
-            idxs_users = np.random.choice(self.num_clients, size=self.sample_ratio, replace=False)
+            idxs_users = np.random.choice(self.num_clients, size=self.clients_per_round, replace=False)
 
-        else:
-            if self.algo == 'rand':
-                # Step 1: select 'm' clients with probability proportional to their loss with replacement
-                idxs_users = np.random.choice(self.num_clients, p=self.ratio, size=self.sample_ratio, replace=True)
+        elif self.algo == 'rand':
+            # Step 1: select 'm' clients with probability proportional to their loss with replacement
+            idxs_users = np.random.choice(self.num_clients, p=self.ratio, size=self.clients_per_round, replace=True)
 
-            elif self.algo == 'pow-d' or self.algo == 'adapow-d':
-                # Step 1: select 'd' clients with probability proportional to their loss without replacement
-                rnd_idx = np.random.choice(self.num_clients, p=self.ratio, size=self.powd, replace=False)
-                
-                # Step 2: sort the selected clients in descending order of their loss
-                repval = list(zip([loc_loss[i] for i in rnd_idx], rnd_idx))
-                repval.sort(key=lambda x: x[0], reverse=True)
-                rep = list(zip(*repval))
-                
-                # Step 3: select indices of top 'm' clients from the sorted list
-                idxs_users = rep[1][:int(self.sample_ratio)]
+        elif self.algo == 'randint':
+            # 'rand' for intermittent client availability
+            delete = 0.2
+            if (rnd % 2) == 0:
+                del_idx = np.random.choice(int(self.num_clients/2), size=int(delete*self.num_clients/2), replace=False)
+                search_idx = np.delete(np.arange(0, self.num_clients/2), del_idx)
+            else:
+                del_idx = np.random.choice(np.arange(self.num_clients/2, self.num_clients), size=int(delete*self.num_clients/2), replace=False)
+                search_idx = np.delete(np.arange(self.num_clients/2, self.num_clients), del_idx)
 
-        return idxs_users
+            modified_data_ratios = [self.ratio[int(i)] for i in search_idx]/sum([self.ratio[int(i)] for i in search_idx])
+            idxs_users = np.random.choice(search_idx, p=modified_data_ratios, size=self.clients_per_round, replace=True)
+
+        elif self.algo == 'pow-d':
+            # standard power-of-choice strategy
+
+            # Step 1: select 'd' clients with probability proportional to their loss without replacement
+            rnd_idx = np.random.choice(self.num_clients, p=self.ratio, size=self.powd, replace=False)
+
+            # Step 2: sort the selected clients in descending order of their loss
+            repval = list(zip([client_loss[i] for i in rnd_idx], rnd_idx))
+            repval.sort(key=lambda x: x[0], reverse=True)
+            rep = list(zip(*repval))
+
+            # Step 3: select indices of top 'm' clients from the sorted list
+            idxs_users = rep[1][:int(self.clients_per_round)]
+
+        elif self.algo == 'rpow-d':
+            # computation/communication efficient variant of 'pow-d'
+
+            # Step 1: select 'd' clients with probability proportional to their loss without replacement
+            rnd_idx1 = np.random.choice(self.num_clients, p=self.ratio, size=self.powd, replace=False)
+
+            # Step 2: sort the selected clients in descending order of their proxy-loss
+            repval = list(zip([client_loss_proxy[i] for i in rnd_idx1], rnd_idx1))
+            repval.sort(key=lambda x: x[0], reverse=True)
+            rep = list(zip(*repval))
+
+            # Step 3: select indices of top 'm' clients from the sorted list
+            idxs_users = rep[1][:int(self.clients_per_round)]
+
+        elif self.algo == 'pow-dint':
+            # 'pow-d' for intermittent client availability
+            delete = 0.2
+            if (rnd % 2) == 0:
+                del_idx = np.random.choice(int(self.num_clients/2), size=int(delete*self.num_clients/2), replace=False)
+                search_idx = list(np.delete(np.arange(0, self.num_clients/2), del_idx))
+            else:
+                del_idx = np.random.choice(np.arange(self.num_clients/2, self.num_clients), size=int(delete*self.num_clients/2), replace=False)
+                search_idx = list(np.delete(np.arange(self.num_clients/2, self.num_clients), del_idx))
+
+            modified_data_ratios = [self.ratio[int(i)] for i in search_idx]/sum([self.ratio[int(i)] for i in search_idx])
+            rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=self.powd, replace=False)
+
+            repval = list(zip([client_loss[int(i)] for i in rnd_idx], rnd_idx))
+            repval.sort(key=lambda x: x[0], reverse=True)
+            rep = list(zip(*repval))
+            idxs_users = rep[1][:int(self.clients_per_round)]
+
+        elif self.algo == 'rpow-dint':
+            # 'rpow-d' for intermittent client availability
+            delete = 0.2
+            if (rnd % 2) == 0:
+                del_idx = np.random.choice(int(self.num_clients/2), size=int(delete*self.num_clients/2), replace=False)
+                search_idx = list(np.delete(np.arange(0, self.num_clients/2), del_idx))
+            else:
+                del_idx = np.random.choice(np.arange(self.num_clients/2, self.num_clients), size=int(delete*self.num_clients/2), replace=False)
+                search_idx = list(np.delete(np.arange(self.num_clients/2, self.num_clients), del_idx))
+
+            modified_data_ratios = [self.ratio[int(i)] for i in search_idx]/sum([self.ratio[int(i)] for i in search_idx])
+            rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=self.powd, replace=False)
+
+            repval = list(zip([client_loss_proxy[int(i)] for i in rnd_idx], rnd_idx))
+            repval.sort(key=lambda x: x[0], reverse=True)
+            rep = list(zip(*repval))
+            idxs_users = rep[1][:int(self.clients_per_round)]
+
+        elif self.algo == 'afl':
+            # benchmark strategy
+            # TODO: args.____ needs to be changed to self.____
+            soft_temp = 0.01
+            sorted_loss_idx = np.argsort(client_loss_proxy)
+
+            for j in sorted_loss_idx[:int(args.delete_ratio*args.num_clients)]:
+                client_loss_proxy[j]=-np.inf
+
+            loss_prob = np.exp(soft_temp*client_loss_proxy)/sum(np.exp(soft_temp*client_loss_proxy))
+            idx1 = np.random.choice(int(args.num_clients), p=loss_prob, size = int(np.floor((1-args.rnd_ratio)*args.clients_per_round)),
+                                    replace=False)
+
+            new_idx = np.delete(np.arange(0,args.num_clients),idx1)
+            idx2 = np.random.choice(new_idx, size = int(args.clients_per_round-np.floor((1-args.rnd_ratio)*args.clients_per_round)), replace=False)
+
+            idxs_users = list(idx1)+list(idx2)
+
+        return idxs_users, rnd_idx
