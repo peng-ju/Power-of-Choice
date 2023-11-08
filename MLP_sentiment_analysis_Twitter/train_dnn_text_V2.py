@@ -102,7 +102,8 @@ def run(rank, size):
             aggregate_parameters.append(torch.zeros_like(param)) 
     
     # criterion
-    criterion = nn.NLLLoss().to(device)
+    # criterion = nn.NLLLoss().to(device)
+    criterion =nn.BCELoss().to(device)
 
     # select optimizer according to algorithm
     optimizer = torch.optim.SGD(model.parameters(), 
@@ -355,7 +356,7 @@ def evaluate_client(model, criterion, partition, traindata):
                 # vec_target = target
 
                 vec_target = vec_target.to(device,non_blocking=True)
-                vec_target = torch.LongTensor(vec_target.type(torch.LongTensor)) # torch.cuda.LongTensor
+                # vec_target = torch.LongTensor(vec_target.type(torch.LongTensor)) # torch.cuda.LongTensor
 
                 outputs = model(data)
                 outputs.to(device)
@@ -390,7 +391,7 @@ def evaluate(model, test_loader, criterion):
             # vec_target = target
             
             vec_target = vec_target.to(device,non_blocking=True)
-            vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
+            # vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
 
             # Inference
             outputs = model(data)
@@ -399,7 +400,8 @@ def evaluate(model, test_loader, criterion):
             loss += batch_loss.item()
 
             # Prediction
-            _, pred_labels = torch.max(outputs, 1)
+            # _, pred_labels = torch.max(outputs, 1)
+            pred_labels = get_label(outputs)
             correct += torch.sum(torch.eq(pred_labels, vec_target)).item()/len(pred_labels)
             total += 1
 
@@ -426,7 +428,7 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         # vec_target = target
 
         vec_target = vec_target.to(device,non_blocking = True)
-        vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
+        # vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
         
         outputs = model(data)
         outputs.to(device)
@@ -448,7 +450,9 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         loss += batch_loss.item()
 
         # Prediction
-        _, pred_labels = torch.max(outputs, 1)
+        # _, pred_labels = torch.max(outputs, 1)
+        pred_labels = get_label(outputs)
+
         correct += torch.sum(torch.eq(pred_labels, vec_target)).item()/len(pred_labels)
         total += 1
 
@@ -479,6 +483,11 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
     
     return los, model
 
+def get_label(x):
+    res = torch.zeros_like(x)
+    res[x>0.5] = 1
+    
+    return res
 
 def vector_encoding(num_class, target):
     # """

@@ -20,7 +20,7 @@ def args_parser():
                         help='control the non-iidness of dataset')
     parser.add_argument('--num_classes',
                         type=int,
-                        default=2, # positve or negative
+                        default=1, # positve or negative
                         help='number of classes')
     parser.add_argument('--gmf',
                         default=0,
