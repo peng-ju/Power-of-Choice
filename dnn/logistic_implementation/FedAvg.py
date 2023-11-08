@@ -3,8 +3,9 @@ import time
 import numpy as np
 
 import torch
+from torch.utils.data import DataLoader, Dataset, Subset
 
-from utils import read_data
+from utils import read_data, SyntheticDataset
 
 class FedAvg(object):
     def __init__(self, lr, bs, localE, algo, powd, num_clients, clients_per_round, train_data_dir, test_data_dir, num_classes, device=None):
@@ -20,7 +21,13 @@ class FedAvg(object):
         self.device = device
 
         # read data
+        self.cnt = 0
         _, _, self.train_data, self.test_data = read_data(train_data_dir, test_data_dir)
+
+        # custom
+        self.trainset = SyntheticDataset(train_data_dir, train=True)
+        self.testset = SyntheticDataset(test_data_dir, train=False)
+
         self.num_clients = num_clients  # len(self.train_data.keys())  # number of clients, K
         self.ratio = self.get_ratio()  # ratio, p_k for each client k
         self.dim = np.array(self.train_data['f_00000']['x']).shape[1]  # input dimension
@@ -69,32 +76,43 @@ class FedAvg(object):
 
         return ratios/total_size
 
-    def eval(self, i, data):
+    def eval(self, i, on_data='test'):
         """ compute loss, acc for client `i` on train/test data """
         self.model.eval()
 
         # fetch data for client `i`
         uname = 'f_{0:05d}'.format(i)
-        data = self.test_data if data == 'test' else self.train_data
-        X = torch.tensor(data[uname]['x'], dtype=torch.float32)
-        y = torch.tensor(data[uname]['y'], dtype=torch.int64)
+        dataset = self.testset if on_data == 'test' else self.trainset
+        datasubset = Subset(dataset, indices=dataset.partitions[uname])
+        dataloader = DataLoader(datasubset,
+                                batch_size=len(datasubset), #self.bs,
+                                shuffle=True,
+                                pin_memory=True)
 
+        loss, correct, total = 0, 0, 0
         with torch.no_grad():
-            # foward pass
-            outputs = self.model(X)
-            # torch.nn.functional.softmax(outputs) == softmax(X@w)
+            for batch_idx, (data, target) in enumerate(dataloader):
+                data, target = data.to(self.device), target.to(self.device)
+                
+                # foward pass
+                outputs = self.model(data)
+                # torch.nn.functional.softmax(outputs) == softmax(X@w)
 
-            # compute loss
-            loss = self.criterion(outputs, y)
+                # compute loss
+                loss_tmp = self.criterion(outputs, target)
+                loss += loss_tmp.item() * data.size(0)
 
-            # prediction
-            _, pred_labels = torch.max(outputs,1)
-            pred_labels = pred_labels.view(-1)
-            acc = torch.mean((pred_labels == y).float())
+                # prediction
+                _, pred_labels = torch.max(outputs,1)
+                pred_labels = pred_labels.view(-1)
+                correct += torch.sum((pred_labels == target).float()).item()
 
-        return loss.item(), acc.item()
+                total += data.size(0)
+        loss /= total
+        acc = correct/total
+        return loss, acc
 
-    def evaluate(self, data):
+    def evaluate(self, on_data):
         """ evaluate global loss and local losses for all clients
 
         local losses: loss for each client
@@ -109,12 +127,42 @@ class FedAvg(object):
         # compute loss for each client
         for i in range(self.num_clients):
             comptime_start = time.time()
-            loss, acc = self.eval(i, data)
+            loss_i, acc_i = self.eval(i, on_data)
             client_comptime.append(time.time() - comptime_start)
-            global_loss += loss * self.ratio[i]
-            global_acc += acc * self.ratio[i]
-            local_losses.append(loss)
-            local_acc.append(acc)
+            global_loss += loss_i * self.ratio[i]
+            global_acc += acc_i * self.ratio[i]
+            local_losses.append(loss_i)
+            local_acc.append(acc_i)
+
+        # # trick
+        # loss, correct, total = 0, 0, 0
+        # dataset = self.testset if on_data == 'test' else self.trainset
+        # dataloader = DataLoader(dataset,
+        #                         batch_size=min(self.bs, len(dataset)),
+        #                         shuffle=True,
+        #                         pin_memory=True)
+        # self.trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=min(self.bs, len(self.trainset)), shuffle=True)
+        # with torch.no_grad():
+        #     for batch_idx, (data, target) in enumerate(dataloader):
+        #         data, target = data.to(self.device), target.to(self.device)
+                
+        #         # foward pass
+        #         outputs = self.model(data)
+        #         # torch.nn.functional.softmax(outputs) == softmax(X@w)
+
+        #         # compute loss
+        #         loss_tmp = self.criterion(outputs, target)
+        #         loss += loss_tmp.item() * data.size(0)
+
+        #         # prediction
+        #         _, pred_labels = torch.max(outputs,1)
+        #         pred_labels = pred_labels.view(-1)
+        #         correct += torch.sum((pred_labels == target).float()).item()
+
+        #         total += data.size(0)
+        # loss /= total
+        # acc = correct/total
+        # # assert np.allclose(loss, global_loss), f'losses are not equal, {loss=}, {global_loss=}'
 
         return global_loss, global_acc, local_losses, local_acc, client_comptime
 
@@ -122,27 +170,28 @@ class FedAvg(object):
         """ compute loss, acc for client `i` on train data and run optimizer step """
         self.model.train()
 
-        # fetch data for client `i`
+        # fetch single mini-batch for client `i` (stochasticity)
         uname = 'f_{0:05d}'.format(i) 
-        X = torch.tensor(self.train_data[uname]['x'], dtype=torch.float32)
-        y = torch.tensor(self.train_data[uname]['y'], dtype=torch.int64)
-
-        # fetch mini-batch (stochasticity)
-        sample_idx = np.random.choice(X.shape[0], size=self.bs)
+        datasubset = Subset(self.trainset, indices=self.trainset.partitions[uname])
+        dataloader = DataLoader(datasubset,
+                                batch_size=min(self.bs, len(datasubset)),
+                                shuffle=True,
+                                pin_memory=True)
+        data, target = next(iter(dataloader))
 
         # zero the gradients
         self.optimizer.zero_grad()
 
         # forward pass
-        outputs = self.model(X[sample_idx])
+        outputs = self.model(data)
 
         # compute loss
-        loss = self.criterion(outputs, y[sample_idx])
+        loss = self.criterion(outputs, target)
 
         # prediction
         _, pred_labels = torch.max(outputs,1)
         pred_labels = pred_labels.view(-1)
-        acc = torch.mean((pred_labels == y[sample_idx]).float())
+        acc = torch.mean((pred_labels == target).float())
 
         # backward pass - compute gradients
         loss.backward()
