@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from tqdm import tqdm
 import argparse
@@ -96,23 +97,24 @@ def make_plot(client_selection_type, logs, metric='train_loss'):
         # fetch configuration
         algo, clients_per_round, powd, color, lstyle = client_selection_type[key]
 
-        # load errors from json file
+        # load metric data from json file
         df = pd.read_csv(log_filename, skiprows=range(34))  # dataframe starts from row 35
-        errors = df[df['epoch'] == -1][['round', metric]].sort_values(['round'])[metric].tolist()
+        values = df[df['epoch'] == -1][['round', metric]].sort_values(['round'])[metric].tolist()
         
         # plot global loss for each configuration
         if algo =='rand' or algo =='adapow-d':
             p_label = algo
         else:
             p_label = algo+', d={}'.format(powd)
-        plt.plot(errors, lw=lw, color=color, ls = lstyle, label=p_label)
+        plt.plot(values, lw=lw, color=color, ls = lstyle, label=p_label)
 
     # update plot settings
-    plt.ylabel('Global loss')
+    plt.ylabel(f'Global {re.sub("_", " ", metric) + ("uracy" if metric.endswith("acc") else "")}')
     plt.xlabel('Communication round')
     plt.xticks()
     plt.yticks()
-    plt.legend(loc=1)
+    loc = 'lower right' if metric.endswith('acc') else 'upper right'
+    plt.legend(loc=loc)
     plt.grid()
     plt.title('K=30, m={}'.format(clients_per_round))
     # plt.show()
@@ -138,7 +140,7 @@ def run(rank, args):
     args_str = [f"{key},{value}" for (key, value) in vars(args).items()]
     with open(args.out_fname, "w+") as f:
         print("BEGIN-TRAINING\n" + "\n".join(args_str) + "\n" \
-            "round,epoch,test_loss,train_loss,test_acc,train_acc", file=f)
+            "rank,round,epoch,test_loss,train_loss,test_acc,train_acc", file=f)
 
     logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
     logging.info("This message should appear on the console")
@@ -153,7 +155,7 @@ def run(rank, args):
     # run federated learning experiment for given configuration
     server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.powd, args.num_clients,
                     args.clients_per_round, train_data_dir, test_data_dir, args.num_classes, args.device)
-    errors, local_losses_train = [], []
+    client_train_losses = []
 
     # tracking client loss values, frequency for each client
     client_freq, client_loss_proxy = np.zeros(args.num_clients), np.zeros(args.num_clients)
@@ -173,7 +175,7 @@ def run(rank, args):
             server.powd = args.clients_per_round
 
         # find the set of active clients
-        active_clients, rnd_idx = server.select_clients(local_losses_train, client_loss_proxy, args, rnd)
+        active_clients, rnd_idx = server.select_clients(client_train_losses, client_loss_proxy, args, rnd)
 
         # train active clients locally
         weights, losses, comm_update_times = server.local_update(active_clients)
@@ -185,9 +187,8 @@ def run(rank, args):
         server.set_params(server.global_parameters)
 
         # evaluation
-        global_loss_train, global_acc_train, local_losses_train, local_accuracies_train, client_comp_times_train = server.evaluate('train')
-        global_loss_test, global_acc_test, local_losses_test, local_accuracies_test, client_comp_times_test = server.evaluate('test')
-        errors.append(global_loss_train)
+        train_loss, train_acc, client_train_losses, client_train_accs, client_comp_times_train = server.evaluate('train')
+        test_loss, test_acc, client_test_losses, client_test_accs, client_comp_times_test = server.evaluate('test')
 
         ## bookkeeping
         # update client freq/loss values
@@ -211,11 +212,11 @@ def run(rank, args):
         round_end = time.time()
         round_duration = round(round_end - round_start, 1)
         if round_duration > 1:
-            logging.info(f"[{round_duration} s] Round {rnd} rank {rank} test accuracy {global_acc_test:.3f} test loss {global_loss_train:.3f}")
+            logging.info(f"[{round_duration} s] Round {rnd} rank {rank} test accuracy {test_acc:.3f} test loss {train_loss:.3f}")
 
         with open(args.out_fname, "+a") as f:
             # round,epoch,test_loss,train_loss,test_acc,train_acc
-            print(f"{rnd},{-1},{global_loss_test:.4f},{global_loss_train:.4f},{global_acc_test:.4f},{global_acc_train:.4f}", file=f)
+            print(f"{rank},{rnd},{-1},{test_loss:.4f},{train_loss:.4f},{test_acc:.4f},{train_acc:.4f}", file=f)
     
     print(f"Saving logs to {args.out_fname}")
     return args.out_fname
@@ -241,7 +242,7 @@ if __name__ == '__main__':
         'rand': ('rand', args.clients_per_round, 1, 'k', '-'),
         'powd2': ('pow-d', args.clients_per_round, args.clients_per_round*2, c_t(3), '-.'),
         'powd5': ('pow-d', args.clients_per_round, args.clients_per_round*10, c_t(0), '--'),
-        # 'adapow30': ('adapow-d', args.clients_per_round, K, c_t(1), (0, (5, 10)))
+        # 'adapow30': ('adapow-d', args.clients_per_round, args.num_clients, c_t(1), (0, (5, 10)))
     }
 
     # define device

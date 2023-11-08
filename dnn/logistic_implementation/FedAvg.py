@@ -234,7 +234,7 @@ class FedAvg(object):
             modified_data_ratios = [self.ratio[int(i)] for i in search_idx]/sum([self.ratio[int(i)] for i in search_idx])
             idxs_users = np.random.choice(search_idx, p=modified_data_ratios, size=self.clients_per_round, replace=True)
 
-        elif self.algo == 'pow-d':
+        elif self.algo == 'pow-d' or self.algo == 'adapow-d':
             # standard power-of-choice strategy
 
             # Step 1: select 'd' clients with probability proportional to their loss without replacement
