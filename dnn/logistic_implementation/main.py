@@ -5,6 +5,7 @@ import argparse
 import numpy as np
 import random
 import logging
+import time
 
 import torch
 import torch.distributed as dist
@@ -116,7 +117,7 @@ def make_plot(client_selection_type):
     
     return
 
-def main(args):
+def run(args):
     ## create logs directory if not exist
     if not os.path.exists('./logs'):
         os.makedirs('./logs')
@@ -134,10 +135,15 @@ def main(args):
     # run federated learning experiment for given configuration
     server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.powd, args.num_clients,
                     args.clients_per_round, train_data_dir, test_data_dir, args.num_classes, args.device)
-    errors, local_losses = [], []
-    for rnd in tqdm(range(args.rounds), desc=key): 
+    errors, local_losses_train = [], []
+
+    # tracking client loss values, frequency for each client
+    client_freq, client_loss_proxy = np.zeros(args.num_clients), np.zeros(args.num_clients)
+
+    for rnd in tqdm(range(args.rounds), desc=key):
+        round_start = time.time()
+
         # (optional) decay learning rate according to round index
-        # reduce learning rate by half after 300 and 600 rounds
         if args.decay == True:
             # update_learning_rate(optimizer, rnd, args.lr)
             if rnd == 300 or rnd == 600:
@@ -145,21 +151,49 @@ def main(args):
                     param_group["lr"] /= 2
                     
         # reduce powd from K to m after half rounds (only for 'adapow-d')
-        if algo == 'adapow-d' and rnd == args.rounds//2:
+        if args.algo == 'adapow-d' and rnd == args.rounds//2:
             server.powd = args.clients_per_round
 
         # find the set of active clients
-        active_clients, rnd_idx = server.select_clients(local_losses, None, args, rnd)
+        active_clients, rnd_idx = server.select_clients(local_losses_train, client_loss_proxy, args, rnd)
 
         # train active clients locally
-        weights, _ = server.local_update(active_clients)
+        weights, losses, comm_update_times = server.local_update(active_clients)
 
         # update global parameter by aggregating weights
         server.aggregate(weights)
 
-        # evaluate global and local losses
-        global_loss, local_losses = server.evaluate()
-        errors.append(global_loss)
+        # send global parameters to all clients for evaluation
+        server.set_params(server.global_parameters)
+
+        # evaluation
+        global_loss_train, local_losses_train, local_accuracies_train, client_comp_times_train = server.evaluate('train')
+        global_loss_test, local_losses_test, local_accuracies_test, client_comp_times_test = server.evaluate('test')
+        errors.append(global_loss_train)
+
+        ## bookkeeping
+        # update client freq/loss values
+        for i, loss_i in zip(active_clients, losses):
+            client_freq[i] += 1
+            client_loss_proxy[i] = loss_i
+
+        # (??) getting value function for client selection (required only for "rpow-d", "afl")
+        not_visited = np.where(client_freq == 0)[0]
+        for j in not_visited:
+            if args.algo == "afl":
+                client_loss_proxy[j] = -np.inf
+            else:
+                client_loss_proxy[j] = np.inf
+        
+        # track max communication time
+        if args.algo == "pow-d" or args.algo == "pow-dint":
+            comp_time = max([client_comp_times_train[int(i)] for i in rnd_idx])
+
+        # log results
+        round_end = time.time()
+        round_duration = round(round_end - round_start, 1)
+        if round_duration > 1:
+            logging.info(f"[{round_duration} s] Round {rnd} ") #rank {rank} test accuracy {test_acc:.3f} test loss {test_loss:.3f}")
 
     # save errors to json file
     with open(f'./logs/m={args.clients_per_round}_algo={key}_errors.json', 'w') as f:
@@ -203,6 +237,6 @@ if __name__ == '__main__':
 
         args.algo = algo
         args.powd = powd
-        main(args)
+        run(args)
 
     make_plot(client_selection_type)

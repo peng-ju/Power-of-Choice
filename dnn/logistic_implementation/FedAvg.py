@@ -1,16 +1,18 @@
 import logging
+import time
 import numpy as np
+
 import torch
 
 from utils import read_data
 
 class FedAvg(object):
-    def __init__(self, lr, bs, le, algo, powd, num_clients, clients_per_round, train_data_dir, test_data_dir, num_classes, device=None):
+    def __init__(self, lr, bs, localE, algo, powd, num_clients, clients_per_round, train_data_dir, test_data_dir, num_classes, device=None):
         """ initialize federated optimizer """
         # hyperparameters
         self.lr = lr  # learning rate
         self.bs = bs  # batch size
-        self.le = le  # local epochs
+        self.localE = localE  # local epochs
         self.algo = algo  # client selection algorithm
         self.powd = powd  # d (power of choice param)
         self.clients_per_round = clients_per_round  # clients per round, m
@@ -38,12 +40,14 @@ class FedAvg(object):
             for param in self.model.parameters():
                 self.global_parameters.append(torch.zeros_like(param))
 
+
     def set_params(self, parameters):
         """ set parameters of global model """
         with torch.no_grad():
             for model_param, param in zip(self.model.parameters(), parameters):
                 model_param.copy_(param)
     
+
     def get_params(self):
         """ get parameters of global model """
         local_parameters = []
@@ -65,23 +69,35 @@ class FedAvg(object):
 
         return ratios/total_size
 
-    def loss(self, i):
-        """ compute loss for client `i` """
+    def eval(self, i, data):
+        """ compute loss, acc for client `i` on train/test data """
+        self.model.eval()
+
         # fetch data for client `i`
-        uname = 'f_{0:05d}'.format(i) 
-        X = torch.tensor(self.train_data[uname]['x'], dtype=torch.float32)
-        y = torch.tensor(self.train_data[uname]['y'], dtype=torch.int64)
+        uname = 'f_{0:05d}'.format(i)
+        if data == 'test':
+            X = torch.tensor(self.test_data[uname]['x'], dtype=torch.float32)
+            y = torch.tensor(self.test_data[uname]['y'], dtype=torch.int64)
+        else:
+            X = torch.tensor(self.train_data[uname]['x'], dtype=torch.float32)
+            y = torch.tensor(self.train_data[uname]['y'], dtype=torch.int64)
 
-        # foward pass
-        outputs = self.model(X)
-        # torch.nn.functional.softmax(outputs) == softmax(X@w)
+        with torch.no_grad():
+            # foward pass
+            outputs = self.model(X)
+            # torch.nn.functional.softmax(outputs) == softmax(X@w)
 
-        # compute loss
-        loss = self.criterion(outputs, y)
+            # compute loss
+            loss = self.criterion(outputs, y)
 
-        return loss.item()
+            # prediction
+            _, pred_labels = torch.max(outputs,1)
+            pred_labels = pred_labels.view(-1)
+            acc = torch.mean((pred_labels == y).float())
 
-    def evaluate(self):
+        return loss.item(), acc.item()
+
+    def evaluate(self, data):
         """ evaluate global loss and local losses for all clients
 
         local losses: loss for each client
@@ -89,20 +105,24 @@ class FedAvg(object):
         """
         global_loss = 0
         local_losses = []
-
-        # send global parameters to all clients
-        self.set_params(self.global_parameters)
+        client_comptime = []
+        local_acc = []
 
         # compute loss for each client
         for i in range(self.num_clients):
-            loss = self.loss(i)
+            comptime_start = time.time()
+            loss, acc = self.eval(i, data)
+            client_comptime.append(time.time() - comptime_start)
             global_loss += loss * self.ratio[i]
             local_losses.append(loss)
+            local_acc.append(acc)
 
-        return global_loss, local_losses
+        return global_loss, local_losses, local_acc, client_comptime
 
-    def sgd_step(self, i):
-        """ run one step of SGD on client `i` and updates model parameters """
+    def train(self, i):
+        """ compute loss, acc for client `i` on train data and run optimizer step """
+        self.model.train()
+
         # fetch data for client `i`
         uname = 'f_{0:05d}'.format(i) 
         X = torch.tensor(self.train_data[uname]['x'], dtype=torch.float32)
@@ -120,29 +140,46 @@ class FedAvg(object):
         # compute loss
         loss = self.criterion(outputs, y[sample_idx])
 
+        # prediction
+        _, pred_labels = torch.max(outputs,1)
+        pred_labels = pred_labels.view(-1)
+        acc = torch.mean((pred_labels == y[sample_idx]).float())
+
         # backward pass - compute gradients
         loss.backward()
 
         # backward pass - update weights
         self.optimizer.step()
-        return
+
+        return loss.item(), acc.item()
 
     def local_update(self, active_clients):
         """ train the set of active clients """
         client_params = []
+        comm_update_times = []
+        losses = []
         for i in active_clients:
+            comm_update_start = time.time()
+            loss_i = 0
+
             # send global parameters to client `i`
             self.set_params(self.global_parameters)
             
             # run E steps of SGD on client `i`
-            for _ in range(self.le):
-                self.sgd_step(i)
+            for _ in range(self.localE):
+                tmp_loss, tmp_acc = self.train(i)
+                loss_i += tmp_loss
+            loss_i = loss_i/self.localE
+            losses.append(loss_i)
             
             # get local parameters from client `i`
             local_parameters = self.get_params()
             client_params.append(local_parameters)
 
-        return client_params, active_clients
+            # track communication time
+            comm_update_times.append(time.time() - comm_update_start)
+
+        return client_params, losses, comm_update_times
 
     def aggregate(self, client_params):
         """ aggregation strategy in FedAvg """
@@ -179,6 +216,7 @@ class FedAvg(object):
         if client_loss == []:
             # For the first round, select 'm' clients uniformly at random
             idxs_users = np.random.choice(self.num_clients, size=self.clients_per_round, replace=False)
+            rnd_idx = idxs_users
 
         elif self.algo == 'rand':
             # Step 1: select 'm' clients with probability proportional to their loss with replacement
