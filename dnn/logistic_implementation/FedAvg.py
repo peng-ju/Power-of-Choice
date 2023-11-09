@@ -5,10 +5,12 @@ import numpy as np
 import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 
-from utils import read_data, SyntheticDataset
+import models
+from utils import FederatedDataset
 
 class FedAvg(object):
-    def __init__(self, lr, bs, localE, algo, powd, num_clients, clients_per_round, train_data_dir, test_data_dir, num_classes, device=None):
+    def __init__(self, lr, bs, localE, algo, model, powd, num_clients, clients_per_round, 
+                 dataset, num_classes, NIID, alpha, delete_ratio, rnd_ratio, seed, device=None):
         """ initialize federated optimizer """
         # hyperparameters
         self.lr = lr  # learning rate
@@ -17,35 +19,54 @@ class FedAvg(object):
         self.algo = algo  # client selection algorithm
         self.powd = powd  # d (power of choice param)
         self.clients_per_round = clients_per_round  # clients per round, m
+        self.num_clients = num_clients  # len(self.train_data.keys())  # number of clients, K
+        self.dataset = dataset
         self.num_classes = num_classes  # number of classes in the dataset
-        self.device = device
+        self.NIID = NIID
+        self.alpha = alpha
+        self.delete_ratio = delete_ratio
+        self.rnd_ratio = rnd_ratio
+        self.seed = seed
+        self.device = device  # TODO: yet to integrate ____.to(device)
 
         # read data
-        self.cnt = 0
-        _, _, self.train_data, self.test_data = read_data(train_data_dir, test_data_dir)
-
-        # custom
-        self.trainset = SyntheticDataset(train_data_dir, train=True)
-        self.testset = SyntheticDataset(test_data_dir, train=False)
-
-        self.num_clients = num_clients  # len(self.train_data.keys())  # number of clients, K
-        self.ratio = self.get_ratio()  # ratio, p_k for each client k
-        self.dim = np.array(self.train_data['f_00000']['x']).shape[1]  # input dimension
+        self.data = FederatedDataset(self.dataset, None, self.num_clients, self.seed, 0, self.NIID, self.alpha)
+        self.ratio = self.data.ratio  # ratio, p_k for each client k
+        self.dim = self.data.input_dim  # input dimension
         
-        # defining the model: here, logistic regression
-        self.model = torch.nn.Linear(self.dim, self.num_classes, bias=False)
+        # define model, criterion and initialize global parameters
+        if model == 'LR':
+            self.model = torch.nn.Linear(self.dim, self.num_classes, bias=False)
+            self.criterion = torch.nn.CrossEntropyLoss()
+            
+            # (similar behavior if initialized to random values)
+            self.global_parameters = []
+            with torch.no_grad():
+                for param in self.model.parameters():
+                    self.global_parameters.append(torch.zeros_like(param))
         
-        # defining loss function: here, cross-entropy
-        self.criterion = torch.nn.CrossEntropyLoss()
+        elif model == 'MLP':
+            self.model = models.MLP_FMNIST(dim_in=self.dim, dim_hidden1=64, dim_hidden2 = 30, dim_out=self.num_classes).to(device)
+            self.criterion = torch.nn.NLLLoss()
+
+            # Neural network doesn't train if initialized to zeros
+            self.global_parameters = []
+            with torch.no_grad():
+                for param in self.model.parameters():
+                    self.global_parameters.append(param.detach().clone())
+
+        elif model == 'CNN':
+            model = models.CNNCifar(None) ## TODO: add input dim
+            self.criterion = torch.nn.NLLLoss()
+
+            # Neural network doesn't train if initialized to zeros
+            self.global_parameters = []
+            with torch.no_grad():
+                for param in self.model.parameters():
+                    self.global_parameters.append(param.detach().clone())
 
         # defining the optimizer: here, SGD
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, weight_decay=10e-4)
-
-        # intial global params for server (similar behavior if initialized to random values)
-        self.global_parameters = []
-        with torch.no_grad():
-            for param in self.model.parameters():
-                self.global_parameters.append(torch.zeros_like(param))
 
 
     def set_params(self, parameters):
@@ -64,26 +85,14 @@ class FedAvg(object):
         return local_parameters
 
 
-    def get_ratio(self):
-        """ given the datasize of each client, compute the ratio p_k = |D_k|/|D| """
-        total_size = 0
-        ratios = np.zeros(self.num_clients)
-        for i in range(self.num_clients):
-            key = 'f_{0:05d}'.format(i)
-            local_size = np.array(self.train_data[key]['x']).shape[0]
-            ratios[i] = local_size
-            total_size += local_size
-
-        return ratios/total_size
-
     def eval(self, i, on_data='test'):
         """ compute loss, acc for client `i` on train/test data """
         self.model.eval()
 
         # fetch data for client `i`
-        uname = 'f_{0:05d}'.format(i)
-        dataset = self.testset if on_data == 'test' else self.trainset
-        datasubset = Subset(dataset, indices=dataset.partitions[uname])
+        dataset = self.data.testset if on_data == 'test' else self.data.trainset
+        partitions = self.data.test_partitions if on_data == 'test' else self.data.train_partitions
+        datasubset = Subset(dataset, indices=partitions[i])
         dataloader = DataLoader(datasubset,
                                 batch_size=len(datasubset), #self.bs,
                                 shuffle=True,
@@ -91,23 +100,23 @@ class FedAvg(object):
 
         loss, correct, total = 0, 0, 0
         with torch.no_grad():
-            for batch_idx, (data, target) in enumerate(dataloader):
-                data, target = data.to(self.device), target.to(self.device)
+            for batch_idx, (X, y) in enumerate(dataloader):
+                X, y = X.to(self.device), y.to(self.device)
                 
                 # foward pass
-                outputs = self.model(data)
-                # torch.nn.functional.softmax(outputs) == softmax(X@w)
+                y_hat = self.model(X)
+                # torch.nn.functional.softmax(y_hat) == softmax(X@w)
 
                 # compute loss
-                loss_tmp = self.criterion(outputs, target)
-                loss += loss_tmp.item() * data.size(0)
+                loss_tmp = self.criterion(y_hat, y)
+                loss += loss_tmp.item() * X.size(0)
 
                 # prediction
-                _, pred_labels = torch.max(outputs,1)
+                _, pred_labels = torch.max(y_hat,1)
                 pred_labels = pred_labels.view(-1)
-                correct += torch.sum((pred_labels == target).float()).item()
+                correct += torch.sum((pred_labels == y).float()).item()
 
-                total += data.size(0)
+                total += X.size(0)
         loss /= total
         acc = correct/total
         return loss, acc
@@ -134,36 +143,6 @@ class FedAvg(object):
             local_losses.append(loss_i)
             local_acc.append(acc_i)
 
-        # # trick
-        # loss, correct, total = 0, 0, 0
-        # dataset = self.testset if on_data == 'test' else self.trainset
-        # dataloader = DataLoader(dataset,
-        #                         batch_size=min(self.bs, len(dataset)),
-        #                         shuffle=True,
-        #                         pin_memory=True)
-        # self.trainloader = torch.utils.data.DataLoader(self.trainset, batch_size=min(self.bs, len(self.trainset)), shuffle=True)
-        # with torch.no_grad():
-        #     for batch_idx, (data, target) in enumerate(dataloader):
-        #         data, target = data.to(self.device), target.to(self.device)
-                
-        #         # foward pass
-        #         outputs = self.model(data)
-        #         # torch.nn.functional.softmax(outputs) == softmax(X@w)
-
-        #         # compute loss
-        #         loss_tmp = self.criterion(outputs, target)
-        #         loss += loss_tmp.item() * data.size(0)
-
-        #         # prediction
-        #         _, pred_labels = torch.max(outputs,1)
-        #         pred_labels = pred_labels.view(-1)
-        #         correct += torch.sum((pred_labels == target).float()).item()
-
-        #         total += data.size(0)
-        # loss /= total
-        # acc = correct/total
-        # # assert np.allclose(loss, global_loss), f'losses are not equal, {loss=}, {global_loss=}'
-
         return global_loss, global_acc, local_losses, local_acc, client_comptime
 
     def train(self, i):
@@ -171,27 +150,26 @@ class FedAvg(object):
         self.model.train()
 
         # fetch single mini-batch for client `i` (stochasticity)
-        uname = 'f_{0:05d}'.format(i) 
-        datasubset = Subset(self.trainset, indices=self.trainset.partitions[uname])
+        datasubset = Subset(self.data.trainset, indices=self.data.train_partitions[i])
         dataloader = DataLoader(datasubset,
                                 batch_size=min(self.bs, len(datasubset)),
                                 shuffle=True,
                                 pin_memory=True)
-        data, target = next(iter(dataloader))
+        X, y = next(iter(dataloader))
 
         # zero the gradients
         self.optimizer.zero_grad()
 
         # forward pass
-        outputs = self.model(data)
+        y_hat = self.model(X)
 
         # compute loss
-        loss = self.criterion(outputs, target)
+        loss = self.criterion(y_hat, y)
 
         # prediction
-        _, pred_labels = torch.max(outputs,1)
+        _, pred_labels = torch.max(y_hat,1)
         pred_labels = pred_labels.view(-1)
-        acc = torch.mean((pred_labels == target).float())
+        acc = torch.mean((pred_labels == y).float())
 
         # backward pass - compute gradients
         loss.backward()
@@ -248,7 +226,7 @@ class FedAvg(object):
                 global_param.div_(len(client_params))
 
 
-    def select_clients(self, client_loss, client_loss_proxy, args, rnd):
+    def select_clients(self, client_loss, client_loss_proxy, rnd):
         '''
         Client selection part returning the indices the set $\mathcal{S}$ and $\mathcal{A}$
         Assumes that we have the list of local loss values for ALL clients
@@ -256,7 +234,6 @@ class FedAvg(object):
         :param data_ratios: $p_k$
         :param cli_loss: actual local loss F_k(w)
         :param cli_val: proxy of the local loss
-        :param args: variable arguments
         :param rnd: communication round index
         :return: idxs_users (indices of $\mathcal{S}$), rnd_idx (indices of $\mathcal{A}$)
         '''
@@ -349,19 +326,18 @@ class FedAvg(object):
 
         elif self.algo == 'afl':
             # benchmark strategy
-            # TODO: args.____ needs to be changed to self.____
             soft_temp = 0.01
             sorted_loss_idx = np.argsort(client_loss_proxy)
 
-            for j in sorted_loss_idx[:int(args.delete_ratio*args.num_clients)]:
+            for j in sorted_loss_idx[:int(self.delete_ratio*self.num_clients)]:
                 client_loss_proxy[j]=-np.inf
 
             loss_prob = np.exp(soft_temp*client_loss_proxy)/sum(np.exp(soft_temp*client_loss_proxy))
-            idx1 = np.random.choice(int(args.num_clients), p=loss_prob, size = int(np.floor((1-args.rnd_ratio)*args.clients_per_round)),
+            idx1 = np.random.choice(int(self.num_clients), p=loss_prob, size = int(np.floor((1-self.rnd_ratio)*self.clients_per_round)),
                                     replace=False)
 
-            new_idx = np.delete(np.arange(0,args.num_clients),idx1)
-            idx2 = np.random.choice(new_idx, size = int(args.clients_per_round-np.floor((1-args.rnd_ratio)*args.clients_per_round)), replace=False)
+            new_idx = np.delete(np.arange(0,self.num_clients),idx1)
+            idx2 = np.random.choice(new_idx, size = int(self.clients_per_round-np.floor((1-self.rnd_ratio)*self.clients_per_round)), replace=False)
 
             idxs_users = list(idx1)+list(idx2)
 

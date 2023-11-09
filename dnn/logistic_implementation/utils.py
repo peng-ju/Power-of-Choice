@@ -11,126 +11,6 @@ import torch.utils.data.distributed
 import torchvision
 from torchvision import datasets, transforms
 
-
-class SyntheticDataset(torch.utils.data.Dataset):
-    def __init__(self, data_dir, train=True):
-        if train:
-            _, _, self.data, _ = read_data(data_dir, data_dir)
-        else: 
-            _, _, _, self.data = read_data(data_dir, data_dir)
-        
-        self.data_indices = {}
-        self.partitions = {k: [] for k in self.data.keys()}
-        count = 0
-        for uname in sorted(self.data.keys()):
-            for i in range(len(self.data[uname]['x'])):
-                self.data_indices[count] = (uname, i)
-                self.partitions[uname].append(count)
-                count += 1
-
-    def __getitem__(self, index):
-        uname, i = self.data_indices[index]
-        x = torch.tensor(self.data[uname]['x'][i], dtype=torch.float32)
-        y = torch.tensor(self.data[uname]['y'][i], dtype=torch.int64)
-        return x, y
-
-    def __len__(self):
-        return len(self.data_indices)
-    
-
-class FederatedDataset(object):
-    def __init__(self, dataset, args, rnd):
-        self.dataset = dataset
-
-        self.trainset, self.testset, self.train_loader, self.test_loader = self.get_dataset(dataset)
-        
-        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
-        partitioner = DataPartitioner(self.trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
-                                    dataset=args.dataset, print_f=args.print_freq)
-        ratio = partitioner.ratio
-
-    def get_dataset(self, dataset, num_workers=0):
-        if dataset == 'cifar':
-            transform_train = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-
-            trainset = torchvision.datasets.CIFAR10(root='./data',
-                                                train=True, 
-                                                download=True, 
-                                                transform=transform_train)
-            train_loader = torch.utils.data.DataLoader(trainset,
-                                                batch_size=64,
-                                                shuffle=False,
-                                                num_workers=num_workers)
-
-            transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-
-            testset = torchvision.datasets.CIFAR10(root='./data',
-                                            train=False, 
-                                            download=True, 
-                                            transform=transform_test)
-            test_loader = torch.utils.data.DataLoader(testset,
-                                                batch_size=64, 
-                                                shuffle=False, 
-                                                num_workers=num_workers)
-
-        elif dataset == 'fmnist':
-            apply_transform = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,))])
-
-            trainset = torchvision.datasets.FashionMNIST(root='./data',
-                                                    train=True,
-                                                    download=True,
-                                                    transform=apply_transform)
-            train_loader = torch.utils.data.DataLoader(trainset,
-                                                    batch_size=64,
-                                                    shuffle=False,
-                                                    num_workers=num_workers)
-
-            testset = torchvision.datasets.FashionMNIST(root='./data',
-                                                train=False,
-                                                download=True,
-                                                transform=apply_transform)
-            test_loader = torch.utils.data.DataLoader(testset,
-                                                    batch_size=64,
-                                                    shuffle=False,
-                                                    num_workers=num_workers)
-
-        elif dataset == 'emnist':
-            apply_transform = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,))])
-
-            trainset = torchvision.datasets.EMNIST(root='./data',
-                                                    split = 'digits',
-                                                    train=True,
-                                                    download=True,
-                                                    transform=apply_transform)
-
-            train_loader = torch.utils.data.DataLoader(trainset,
-                                                    batch_size=64,
-                                                    shuffle=False,
-                                                    num_workers=num_workers)
-
-            testset = torchvision.datasets.EMNIST(root='./data',
-                                                        split= 'digits',
-                                                        train=False,
-                                                        download=True,
-                                                        transform=apply_transform)
-            test_loader = torch.utils.data.DataLoader(testset,
-                                                    batch_size=64,
-                                                    shuffle=False,
-                                                    num_workers=num_workers)
-
-        return trainset, testset, train_loader, test_loader
-
-
 def read_data(train_data_dir, test_data_dir):
     ''' parses data in given train and test data directories
     assumes:
@@ -172,18 +52,130 @@ def read_data(train_data_dir, test_data_dir):
 
     return clients, groups, train_data, test_data
 
-# def main():
-#     train_data_dir = './data/'
-#     test_data_dir = './data/'
-#     clients, groups, train_data, test_data = read_data(train_data_dir, test_data_dir)
+
+class SyntheticDataset(torch.utils.data.Dataset):
+    def __init__(self, data_dir, train=True):
+        if train:
+            _, _, self.data, _ = read_data(data_dir, data_dir)
+        else: 
+            _, _, _, self.data = read_data(data_dir, data_dir)
+        
+        self.data_indices = {}
+        self.partitions = {}
+        count = 0
+        for uname in sorted(self.data.keys()):
+            for i in range(len(self.data[uname]['x'])):
+                uid = int(uname.split('_')[1])  # 'f_00001' -> 1
+                self.data_indices[count] = (uid, i)
+                if uid in self.partitions:
+                    self.partitions[uid].append(count)
+                else:
+                    self.partitions[uid] = [count]
+                count += 1
+
+    def __getitem__(self, index):
+        uid, i = self.data_indices[index]
+        uname = 'f_{0:05d}'.format(int(uid))  # 1 -> 'f_00001'
+        x = torch.tensor(self.data[uname]['x'][i], dtype=torch.float32)
+        y = torch.tensor(self.data[uname]['y'][i], dtype=torch.int64)
+        return x, y
+
+    def __len__(self):
+        return len(self.data_indices)
     
-#     A = np.array(train_data['f_00010']['x'])
-#     y = np.array(train_data['f_00010']['y'])
-#     print(y)
 
+class FederatedDataset(object):
+    def __init__(self, dataset, args=None, num_clients=100, seed=1234, rnd=0, 
+                 isNonIID=False, alpha=0.2):
+        self.dataset = dataset
 
-# if __name__ == "__main__":
-#     main()
+        if dataset == 'synthetic':
+            # data
+            self.trainset = SyntheticDataset('./synthetic_data/', train=True)
+            self.testset = SyntheticDataset('./synthetic_data/', train=False)
+
+            # partitions
+            self.train_partitions = self.trainset.partitions
+            self.test_partitions = self.testset.partitions
+
+            # ratio
+            self.ratio = np.array([len(v) for k, v in self.train_partitions.items()])
+            self.ratio = self.ratio/np.sum(self.ratio)
+            print('TRAIN Data ratio: %s' % str(self.ratio))
+            print('sum of ratio: %s' % str(sum(self.ratio)))
+
+            # input size
+            x, y = self.trainset[0]
+            self.input_dim = x.size(0)
+
+        elif dataset == 'fmnist':
+            # data
+            apply_transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,))])
+            self.trainset = torchvision.datasets.FashionMNIST(root='./data',
+                                                    train=True,
+                                                    download=True,
+                                                    transform=apply_transform)
+
+            self.testset = torchvision.datasets.FashionMNIST(root='./data',
+                                                train=False,
+                                                download=True,
+                                                transform=apply_transform)
+            
+            # partitions
+            partition_sizes = [1.0 / num_clients for _ in range(num_clients)]
+            partitioner = DataPartitioner(self.trainset, partition_sizes, seed, rnd, 
+                                               isNonIID, alpha, dataset)
+            self.train_partitions = partitioner.partitions
+            partitioner_ = DataPartitioner(self.testset, partitioner.ratio, seed, rnd, 
+                                               False, 0, dataset)
+            self.test_partitions = partitioner_.partitions
+            
+            # ratio
+            self.ratio = partitioner.ratio  # Ratio of data sizes
+            print('fmnist Data ratio: %s' % str(self.ratio))
+            
+            # input dim
+            self.input_dim = np.prod(self.trainset[0][0].shape)
+            print('input_dim:', self.input_dim)
+
+        elif dataset == 'cifar':
+            # TODO: add data partitions
+            transform_train = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+            self.trainset = torchvision.datasets.CIFAR10(root='./data',
+                                                train=True, 
+                                                download=True, 
+                                                transform=transform_train)
+            
+            transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+            self.testset = torchvision.datasets.CIFAR10(root='./data',
+                                            train=False, 
+                                            download=True, 
+                                            transform=transform_test)
+
+        elif dataset == 'emnist':
+            # TODO: add data partitions
+            apply_transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,))])
+            self.trainset = torchvision.datasets.EMNIST(root='./data',
+                                                    split = 'digits',
+                                                    train=True,
+                                                    download=True,
+                                                    transform=apply_transform)
+
+            self.testset = torchvision.datasets.EMNIST(root='./data',
+                                                        split= 'digits',
+                                                        train=False,
+                                                        download=True,
+                                                        transform=apply_transform)
 
 
 class Partition(object):
@@ -326,120 +318,3 @@ class DataPartitioner(object):
             print('Data ratio: %s' % str(weights))
 
         return idx_batch, weights, net_cls_counts, np.sum(local_sizes)
-
-def partition_dataset(size, args, rnd):
-
-    if args.dataset == 'cifar':
-        transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-
-        trainset = torchvision.datasets.CIFAR10(root='./data',
-                                            train=True, 
-                                            download=True, 
-                                            transform=transform_train)
-
-        train_loader = torch.utils.data.DataLoader(trainset,
-                                               batch_size=64,
-                                               shuffle=False,
-                                               num_workers=args.num_workers)
-    
-        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
-        partition = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
-                                    dataset=args.dataset, print_f=args.print_freq)
-        ratio = partition.ratio
-
-        transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-
-        testset = torchvision.datasets.CIFAR10(root='./data',
-                                        train=False, 
-                                        download=True, 
-                                        transform=transform_test)
-
-        test_loader = torch.utils.data.DataLoader(testset,
-                                            batch_size=64, 
-                                            shuffle=False, 
-                                            num_workers=args.num_workers)
-
-    elif args.dataset == 'fmnist':
-        apply_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))])
-
-        trainset = torchvision.datasets.FashionMNIST(root='./data',
-                                                train=True,
-                                                download=True,
-                                                transform=apply_transform)
-        train_loader = torch.utils.data.DataLoader(trainset,
-                                                   batch_size=64,
-                                                   shuffle=False,
-                                                   num_workers=args.num_workers)
-
-        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
-        partition = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
-                                    dataset=args.dataset, print_f=args.print_freq)
-        ratio = partition.ratio  # Ratio of data sizes
-
-        testset = torchvision.datasets.FashionMNIST(root='./data',
-                                               train=False,
-                                               download=True,
-                                               transform=apply_transform)
-        test_loader = torch.utils.data.DataLoader(testset,
-                                                  batch_size=64,
-                                                  shuffle=False,
-                                                  num_workers=args.num_workers)
-
-    elif args.dataset == 'emnist':
-        apply_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))])
-
-        trainset = torchvision.datasets.EMNIST(root='./data',
-                                                split = 'digits',
-                                                train=True,
-                                                download=True,
-                                                transform=apply_transform)
-
-        train_loader = torch.utils.data.DataLoader(trainset,
-                                                   batch_size=64,
-                                                   shuffle=False,
-                                                   num_workers=args.num_workers)
-
-        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
-        partition = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
-                                    dataset=args.dataset, print_f=args.print_freq)
-        ratio = partition.ratio  # Ratio of data sizes
-
-        testset = torchvision.datasets.EMNIST(root='./data',
-                                                    split= 'digits',
-                                                    train=False,
-                                                    download=True,
-                                                    transform=apply_transform)
-        test_loader = torch.utils.data.DataLoader(testset,
-                                                  batch_size=64,
-                                                  shuffle=False,
-                                                  num_workers=args.num_workers)
-
-    # add more datasets here
-
-    args.img_size = trainset[0][0].shape
-
-    return partition, train_loader, test_loader, ratio, partition.dat_stat, partition.endat_size
-
-def partitiondata_loader(partition, client_idx, batch_size):
-    '''
-    single mini-batch loader
-    '''
-    partition = partition.use(client_idx)
-
-    data_idx = random.sample(range(len(partition)), k=int(min(batch_size,len(partition))))
-    partitioned = torch.utils.data.Subset(partition, indices=data_idx)
-    trainbatch_loader = torch.utils.data.DataLoader(partitioned,
-                                               batch_size=batch_size,
-                                               shuffle=True,
-                                               pin_memory=True)
-    return trainbatch_loader
