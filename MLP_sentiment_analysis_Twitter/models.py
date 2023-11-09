@@ -1,4 +1,5 @@
 import math
+import torch
 from torch import nn
 import torch.nn.functional as F
 
@@ -70,8 +71,8 @@ class MLP_text(nn.Module):
         x = self.relu(x)
         x = self.layer_hidden3(x)
 
-        return self.logsoftmax(x)
-
+        # return self.logsoftmax(x)
+        return torch.sigmoid(x).flatten()
 
 __all__ = ['VGG', 'vgg11', 'vgg11_bn', 'vgg13', 'vgg13_bn', 'vgg16', 'vgg16_bn',
     'vgg19_bn', 'vgg19']

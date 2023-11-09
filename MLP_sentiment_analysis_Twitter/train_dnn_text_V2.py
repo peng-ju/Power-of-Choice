@@ -102,7 +102,8 @@ def run(rank, size):
             aggregate_parameters.append(torch.zeros_like(param)) 
     
     # criterion
-    criterion = nn.NLLLoss().to(device)
+    # criterion = nn.NLLLoss().to(device)
+    criterion =nn.BCELoss().to(device)
 
     # select optimizer according to algorithm
     optimizer = torch.optim.SGD(model.parameters(), 
@@ -136,7 +137,7 @@ def run(rank, size):
         # (optional) decay learning rate according to round index
         if args.decay == True:
             # update_learning_rate(optimizer, rnd, args.lr)
-            if rnd == 149:
+            if rnd == 160:
                 lr = args.lr/2
                 logging.info("Updating learning rate to {}".format(lr))
                 for param_group in optimizer.param_groups:
@@ -165,7 +166,7 @@ def run(rank, size):
             comm_update_start = time.time()
             for t in range(args.localE):
                 singlebatch_loader = util.partitiondata_loader(partition, i, args.bs, traindata)
-                loss = train_text(rank, model, criterion, optimizer, singlebatch_loader, t)
+                loss, model = train_text(rank, model, criterion, optimizer, singlebatch_loader, t)
                 loss_final += loss/args.localE
             comm_update_end = time.time()
             update_time = comm_update_end - comm_update_start
@@ -355,7 +356,7 @@ def evaluate_client(model, criterion, partition, traindata):
                 # vec_target = target
 
                 vec_target = vec_target.to(device,non_blocking=True)
-                vec_target = torch.LongTensor(vec_target.type(torch.LongTensor)) # torch.cuda.LongTensor
+                # vec_target = torch.LongTensor(vec_target.type(torch.LongTensor)) # torch.cuda.LongTensor
 
                 outputs = model(data)
                 outputs.to(device)
@@ -390,7 +391,7 @@ def evaluate(model, test_loader, criterion):
             # vec_target = target
             
             vec_target = vec_target.to(device,non_blocking=True)
-            vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
+            # vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
 
             # Inference
             outputs = model(data)
@@ -399,8 +400,9 @@ def evaluate(model, test_loader, criterion):
             loss += batch_loss.item()
 
             # Prediction
-            _, pred_labels = torch.max(outputs,1)
-            correct += torch.sum(torch.eq(pred_labels, vec_target)).item() / len(pred_labels)
+            # _, pred_labels = torch.max(outputs, 1)
+            pred_labels = get_label(outputs)
+            correct += torch.sum(torch.eq(pred_labels, vec_target)).item()/len(pred_labels)
             total += 1
 
         acc = (correct / total) * 100
@@ -421,14 +423,15 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         # data loading
         data = data.to(device,non_blocking = True)
         target = target.to(device,non_blocking = True)
+        # encode target
         vec_target = vector_encoding(args.num_classes, target)
         # vec_target = target
 
         vec_target = vec_target.to(device,non_blocking = True)
-        vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
+        # vec_target = torch.LongTensor(vec_target.type(torch.LongTensor))
+        
         outputs = model(data)
         outputs.to(device)
-
         # print("\n outputs: ", outputs)
         # print("\n vec_target: ", vec_target)
         batch_loss = criterion(outputs, vec_target)
@@ -447,7 +450,9 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         loss += batch_loss.item()
 
         # Prediction
-        _, pred_labels = torch.max(outputs, 1)
+        # _, pred_labels = torch.max(outputs, 1)
+        pred_labels = get_label(outputs)
+
         correct += torch.sum(torch.eq(pred_labels, vec_target)).item()/len(pred_labels)
         total += 1
 
@@ -476,8 +481,13 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
                       top1=acc), file=f)
 
     
-    return los
+    return los, model
 
+def get_label(x):
+    res = torch.zeros_like(x)
+    res[x>0.5] = 1
+    
+    return res
 
 def vector_encoding(num_class, target):
     # """

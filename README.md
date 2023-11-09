@@ -4,6 +4,7 @@ reproduce the paper "Towards Understanding Biased Client Selection in Federated 
 
 ## Activate virtual environment with Python3.10
 source venv/bin/activate 
+
 deactivate
 
 - python==3.10.13
