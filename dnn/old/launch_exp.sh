@@ -64,28 +64,57 @@ python trainer.py \
     --dataset fmnist --NIID --print_freq 1 \
     --model MLP --algo rand \
     --num_clients 100 --clients_per_round 3 \
-    --save -p --rounds 500 --seed 1 
+    --save -p --rounds 400 --seed 2 --name fig4a
 
 python trainer.py \
     --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 \
     --dataset fmnist --NIID --print_freq 1 \
     --model MLP --algo pow-d --powd 6 \
     --num_clients 100 --clients_per_round 3 \
-    --save -p --rounds 500 --seed 1
+    --save -p --rounds 400 --seed 1 --name fig4a
 
 python trainer.py \
     --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 \
     --dataset fmnist --NIID --print_freq 1 \
     --model MLP --algo pow-d --powd 9 \
     --num_clients 100 --clients_per_round 3 \
-    --save -p --rounds 500 --seed 1
+    --save -p --rounds 400 --seed 1 --name fig4a
 
 python trainer.py \
     --constantE --lr 0.005 --bs 64 --localE 30 --alpha 2 \
     --dataset fmnist --NIID --print_freq 1 \
     --model MLP --algo pow-d --powd 15 \
     --num_clients 100 --clients_per_round 3 \
-    --save -p --rounds 500 --seed 1
+    --save -p --rounds 400 --seed 1 --name fig4a
+
+## 4b
+python trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 0.3 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo rand \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 100 --seed 1 --name fig4b
+
+python trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 0.3 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo pow-d --powd 6 \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 100 --seed 1 --name fig4b
+
+python trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 0.3 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo pow-d --powd 9 \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 100 --seed 1 --name fig4b
+
+python trainer.py \
+    --constantE --lr 0.005 --bs 64 --localE 30 --alpha 0.3 \
+    --dataset fmnist --NIID --print_freq 1 \
+    --model MLP --algo pow-d --powd 15 \
+    --num_clients 100 --clients_per_round 3 \
+    --save -p --rounds 100 --seed 1 --name fig4b
 
 # line profiler
 # 1. rand

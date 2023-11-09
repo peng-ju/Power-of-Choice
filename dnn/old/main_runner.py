@@ -17,6 +17,8 @@ from dist_optimizer import DistOptimizer
 import utils
 import models
 
+from utils import read_data
+
 
 logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
 logging.debug("This message should appear on the console")
@@ -103,8 +105,22 @@ def run(rank, args):
     torch.backends.cudnn.deterministic = True
 
     # load data
-    partitioner, dataratios, train_loader, test_loader = utils.partition_dataset(args, rnd=0)
-
+    # partitioner, dataratios, train_loader, test_loader = utils.partition_dataset(args, rnd=0)
+    # read data
+    data_dir = '../logistic_regression_synthetic_data/synthetic_data/'
+    _, _, train_data, test_data = read_data(data_dir, data_dir)
+    num_clients = len(train_data.keys())  # number of clients, K
+    # dataratios = get_ratio()  # ratio, p_k for each client k
+    total_size = 0
+    dataratios = np.zeros(num_clients)
+    for i in range(num_clients):
+        key = 'f_{0:05d}'.format(i)
+        local_size = np.array(train_data[key]['x']).shape[0]
+        dataratios[i] = local_size
+        total_size += local_size
+    dataratios = dataratios/total_size
+    dim = np.array(train_data['f_00000']['x']).shape[1]  # input dimension
+    
     # tracking client loss values, frequency for each client
     client_freq, client_loss_proxy = np.zeros(args.num_clients), np.zeros(args.num_clients)
 
@@ -114,6 +130,8 @@ def run(rank, args):
         model = models.MLP_FMNIST(dim_in=input_dims, dim_hidden1=64, dim_hidden2 = 30, dim_out=args.num_classes).to(device)
     elif args.model == "CNN":
         model = models.CNN_CIFAR(args).to(device)
+    elif args.model == "LR":
+        torch.nn.Linear(dim, args.num_classes, bias=False)
 
     # allocate buffer for global and aggregate parameters
     # ref: https://discuss.pytorch.org/t/how-to-assign-an-arbitrary-tensor-to-models-parameter/44082/3
@@ -121,18 +139,22 @@ def run(rank, args):
     aggregate_parameters = []
     with torch.no_grad():
         for param in model.parameters():
+            param.zero_()
             global_parameters.append(param.detach().clone())
             aggregate_parameters.append(torch.zeros_like(param))            
 
-    # define loss function
-    criterion = nn.NLLLoss().to(device)
+    # # define loss function
+    # criterion = nn.NLLLoss().to(device)
 
-    # define optimizer
-    optimizer = torch.optim.SGD(model.parameters(), 
-                                lr=args.lr, 
-                                momentum=args.momentum, 
-                                nesterov=False,
-                                weight_decay=1e-4)
+    # defining loss function: here, cross-entropy
+    criterion = torch.nn.CrossEntropyLoss()
+
+    # # define optimizer
+    # optimizer = torch.optim.SGD(model.parameters(), 
+    #                             lr=args.lr, 
+    #                             momentum=args.momentum, 
+    #                             nesterov=False,
+    #                             weight_decay=1e-4)
     # optimizer = DistOptimizer(model.parameters(),
     #                             lr=args.lr,
     #                             gmf=args.gmf, # set to 0
@@ -141,6 +163,9 @@ def run(rank, args):
     #                             momentum=args.momentum, # set to 0
     #                             nesterov = False,
     #                             weight_decay=1e-4)
+
+    # defining the optimizer: here, SGD
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, weight_decay=10e-4)
 
     # randomly select clients for the first round
     replace_param = False
@@ -183,7 +208,20 @@ def run(rank, args):
             loss_final = 0
             comm_update_start = time.time()
             for t in range(args.localE):
-                singlebatch_loader = utils.partitiondata_loader(partitioner, i, args.bs)
+                # singlebatch_loader = utils.partitiondata_loader(partitioner, i, args.bs)
+                # fetch data for client `i`
+                uname = 'f_{0:05d}'.format(i) 
+                X = torch.tensor(train_data[uname]['x'], dtype=torch.float32)
+                y = torch.tensor(train_data[uname]['y'], dtype=torch.int64)
+
+                # fetch mini-batch (stochasticity)
+                sample_idx = np.random.choice(X.shape[0], size=args.bs)
+
+                trainbatch_loader = torch.utils.data.DataLoader(zip(X, y),
+                                        batch_size=batch_size,
+                                        shuffle=True,
+                                        pin_memory=True)
+
                 loss = train(i, model, criterion, optimizer, singlebatch_loader, t, args)
                 loss_final += loss/args.localE
             comm_update_end = time.time()

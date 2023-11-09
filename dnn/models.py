@@ -24,9 +24,9 @@ class MLP_FMNIST(nn.Module):
 
         return self.logsoftmax(x)
 
-class CNN_CIFAR(nn.Module):
+class CNNCifar(nn.Module):
     def __init__(self, args):
-        super(CNN_CIFAR, self).__init__()
+        super(CNNCifar, self).__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)

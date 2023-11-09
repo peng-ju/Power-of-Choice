@@ -1,39 +1,199 @@
+import os
+import json
+import random
+from random import Random
+
 import numpy as np
 from numpy.random import RandomState
-from random import Random
-import random
 
 import torch
 import torch.utils.data.distributed
 import torchvision
 from torchvision import datasets, transforms
 
-from models import *
+def read_data(train_data_dir, test_data_dir):
+    ''' parses data in given train and test data directories
+    assumes:
+    - the data in the input directories are .json files with 
+        keys 'users' and 'user_data'
+    - the set of train set users is the same as the set of test set users
+    
+    Return:
+        clients: list of client ids
+        groups: list of group ids; empty list if none found
+        train_data: dictionary of train data
+        test_data: dictionary of test data
+    '''
+    clients = []
+    groups = []
+    train_data = {}
+    test_data = {}
+
+    train_files = os.listdir(train_data_dir)
+    train_files = [f for f in train_files if f.endswith('train.json')]
+    for f in train_files:
+        file_path = os.path.join(train_data_dir,f)
+        with open(file_path, 'r') as inf:
+            cdata = json.load(inf)
+        clients.extend(cdata['users'])
+        if 'hierarchies' in cdata:
+            groups.extend(cdata['hierarchies'])
+        train_data.update(cdata['user_data'])
+
+    test_files = os.listdir(test_data_dir)
+    test_files = [f for f in test_files if f.endswith('test.json')]
+    for f in test_files:
+        file_path = os.path.join(test_data_dir,f)
+        with open(file_path, 'r') as inf:
+            cdata = json.load(inf)
+        test_data.update(cdata['user_data'])
+
+    clients = list(train_data.keys())
+
+    return clients, groups, train_data, test_data
+
+
+class SyntheticDataset(torch.utils.data.Dataset):
+    def __init__(self, data_dir, train=True):
+        if train:
+            _, _, self.data, _ = read_data(data_dir, data_dir)
+        else: 
+            _, _, _, self.data = read_data(data_dir, data_dir)
+        
+        self.data_indices = {}
+        self.partitions = {}
+        count = 0
+        for uname in sorted(self.data.keys()):
+            for i in range(len(self.data[uname]['x'])):
+                uid = int(uname.split('_')[1])  # 'f_00001' -> 1
+                self.data_indices[count] = (uid, i)
+                if uid in self.partitions:
+                    self.partitions[uid].append(count)
+                else:
+                    self.partitions[uid] = [count]
+                count += 1
+
+    def __getitem__(self, index):
+        uid, i = self.data_indices[index]
+        uname = 'f_{0:05d}'.format(int(uid))  # 1 -> 'f_00001'
+        x = torch.tensor(self.data[uname]['x'][i], dtype=torch.float32)
+        y = torch.tensor(self.data[uname]['y'][i], dtype=torch.int64)
+        return x, y
+
+    def __len__(self):
+        return len(self.data_indices)
+    
+
+class FederatedDataset(object):
+    def __init__(self, dataset, args=None, num_clients=100, seed=1234, rnd=0, 
+                 isNonIID=False, alpha=0.2):
+        self.dataset = dataset
+
+        if dataset == 'synthetic':
+            # data
+            self.trainset = SyntheticDataset('./synthetic_data/', train=True)
+            self.testset = SyntheticDataset('./synthetic_data/', train=False)
+
+            # partitions
+            self.train_partitions = self.trainset.partitions
+            self.test_partitions = self.testset.partitions
+
+            # ratio
+            self.ratio = np.array([len(v) for k, v in self.train_partitions.items()])
+            self.ratio = self.ratio/np.sum(self.ratio)
+            print('TRAIN Data ratio: %s' % str(self.ratio))
+            print('sum of ratio: %s' % str(sum(self.ratio)))
+
+            # input size
+            x, y = self.trainset[0]
+            self.input_dim = x.size(0)
+
+        elif dataset == 'fmnist':
+            # data
+            apply_transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,))])
+            self.trainset = torchvision.datasets.FashionMNIST(root='./data',
+                                                    train=True,
+                                                    download=True,
+                                                    transform=apply_transform)
+
+            self.testset = torchvision.datasets.FashionMNIST(root='./data',
+                                                train=False,
+                                                download=True,
+                                                transform=apply_transform)
+            
+            # partitions
+            partition_sizes = [1.0 / num_clients for _ in range(num_clients)]
+            partitioner = DataPartitioner(self.trainset, partition_sizes, seed, rnd, 
+                                               isNonIID, alpha, dataset)
+            self.train_partitions = partitioner.partitions
+            partitioner_ = DataPartitioner(self.testset, partitioner.ratio, seed, rnd, 
+                                               False, 0, dataset)
+            self.test_partitions = partitioner_.partitions
+            
+            # ratio
+            self.ratio = partitioner.ratio  # Ratio of data sizes
+            print('fmnist Data ratio: %s' % str(self.ratio))
+            
+            # input dim
+            self.input_dim = np.prod(self.trainset[0][0].shape)
+            print('input_dim:', self.input_dim)
+
+        elif dataset == 'cifar':
+            # TODO: add data partitions
+            transform_train = transforms.Compose([
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+            self.trainset = torchvision.datasets.CIFAR10(root='./data',
+                                                train=True, 
+                                                download=True, 
+                                                transform=transform_train)
+            
+            transform_test = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+            self.testset = torchvision.datasets.CIFAR10(root='./data',
+                                            train=False, 
+                                            download=True, 
+                                            transform=transform_test)
+
+        elif dataset == 'emnist':
+            # TODO: add data partitions
+            apply_transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.1307,), (0.3081,))])
+            self.trainset = torchvision.datasets.EMNIST(root='./data',
+                                                    split = 'digits',
+                                                    train=True,
+                                                    download=True,
+                                                    transform=apply_transform)
+
+            self.testset = torchvision.datasets.EMNIST(root='./data',
+                                                        split= 'digits',
+                                                        train=False,
+                                                        download=True,
+                                                        transform=apply_transform)
+
 
 class Partition(object):
     """ Dataset-like object, but only access a subset of it. """
 
-    def __init__(self, data, indices):
-        """
-        data: full dataset
-        indices: subset of indices of the dataset
-        """
+    def __init__(self, data, index):
         self.data = data
-        self.indices = indices
+        self.index = index
 
     def __len__(self):
-        return len(self.indices)
+        return len(self.index)
 
-    def __getitem__(self, indices):
-        data_idx = self.indices[indices]
+    def __getitem__(self, index):
+        data_idx = self.index[index]
         return self.data[data_idx]
 
 class DataPartitioner(object):
-    """ Partitions a dataset into different chunks/partitions
-    where each partition belongs to that of a client.
-    Partition is basically a list of indices of the dataset.
-    So, partitions is list of partitions where i-th elt is data indices of i-th client.
-    """
+    """ Partitions a dataset into different chunks. """
     def __init__(self, data, sizes=[0.7, 0.2, 0.1], rnd=0, seed=1234, isNonIID=False, alpha=0,
                  dataset=None, print_f=50):
         self.data = data
@@ -158,349 +318,3 @@ class DataPartitioner(object):
             print('Data ratio: %s' % str(weights))
 
         return idx_batch, weights, net_cls_counts, np.sum(local_sizes)
-
-def partition_dataset(args, rnd, num_workers=0):
-
-    if args.dataset == 'cifar':
-        transform_train = transforms.Compose([
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-
-        trainset = torchvision.datasets.CIFAR10(root='./data',
-                                            train=True, 
-                                            download=True, 
-                                            transform=transform_train)
-
-        train_loader = torch.utils.data.DataLoader(trainset,
-                                               batch_size=64,
-                                               shuffle=False,
-                                               pin_memory=True,
-                                               num_workers=args.num_workers)
-    
-        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
-        partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
-                                    dataset=args.dataset, print_f=args.print_freq)
-        # ratio = partitions.ratio
-
-        transform_test = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-
-        testset = torchvision.datasets.CIFAR10(root='./data',
-                                        train=False, 
-                                        download=True, 
-                                        transform=transform_test)
-
-        test_loader = torch.utils.data.DataLoader(testset,
-                                            batch_size=64, 
-                                            shuffle=False, 
-                                            pin_memory=True,
-                                            num_workers=args.num_workers)
-
-    elif args.dataset == 'fmnist':
-        apply_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))])
-
-        trainset = torchvision.datasets.FashionMNIST(root='./data',
-                                                train=True,
-                                                download=True,
-                                                transform=apply_transform)
-        train_loader = torch.utils.data.DataLoader(trainset,
-                                                   batch_size=64,
-                                                   shuffle=False,
-                                                   pin_memory=True,
-                                                   num_workers=args.num_workers)
-
-        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
-        partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
-                                    dataset=args.dataset, print_f=args.print_freq)
-        # ratio = partitions.ratio  # Ratio of data sizes
-
-        testset = torchvision.datasets.FashionMNIST(root='./data',
-                                               train=False,
-                                               download=True,
-                                               transform=apply_transform)
-        test_loader = torch.utils.data.DataLoader(testset,
-                                                  batch_size=64,
-                                                  shuffle=False,
-                                                  pin_memory=True,
-                                                  num_workers=args.num_workers)
-
-    elif args.dataset == 'emnist':
-        apply_transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.1307,), (0.3081,))])
-
-        trainset = torchvision.datasets.EMNIST(root='./data',
-                                                split = 'digits',
-                                                train=True,
-                                                download=True,
-                                                transform=apply_transform)
-
-        train_loader = torch.utils.data.DataLoader(trainset,
-                                                   batch_size=64,
-                                                   shuffle=False,
-                                                   pin_memory=True,
-                                                   num_workers=args.num_workers)
-
-        partition_sizes = [1.0 / args.num_clients for _ in range(args.num_clients)]
-        partitioner = DataPartitioner(trainset, partition_sizes, rnd, isNonIID=args.NIID, alpha=args.alpha,
-                                    dataset=args.dataset, print_f=args.print_freq)
-        # ratio = partitions.ratio  # Ratio of data sizes
-
-        testset = torchvision.datasets.EMNIST(root='./data',
-                                                    split= 'digits',
-                                                    train=False,
-                                                    download=True,
-                                                    transform=apply_transform)
-        test_loader = torch.utils.data.DataLoader(testset,
-                                                  batch_size=64,
-                                                  shuffle=False,
-                                                  pin_memory=True,
-                                                  num_workers=args.num_workers)
-
-    # add more datasets here
-
-    args.img_size = trainset[0][0].shape
-
-    # return partitions, train_loader, test_loader, ratio, partitions.dat_stat, partitions.endat_size
-    return partitioner, partitioner.ratio, train_loader, test_loader
-
-def partitiondata_loader(partitioner, rank, batch_size):
-    '''
-    single mini-batch loader
-    '''
-    partition = partitioner.use(rank)
-
-    data_idx = random.sample(range(len(partition)), k=int(min(batch_size,len(partition))))
-    partitioned = torch.utils.data.Subset(partition, indices=data_idx)
-    trainbatch_loader = torch.utils.data.DataLoader(partitioned,
-                                               batch_size=batch_size,
-                                               shuffle=True,
-                                               pin_memory=True)
-    return trainbatch_loader
-
-
-def select_clients(data_ratios, client_loss, client_loss_proxy, args, rnd):
-    '''
-    Client selection part returning the indices the set $\mathcal{S}$ and $\mathcal{A}$
-    Assumes that we have the list of local loss values for ALL clients
-
-    :param data_ratios: $p_k$
-    :param cli_loss: actual local loss F_k(w)
-    :param cli_val: proxy of the local loss
-    :param args: variable arguments
-    :param rnd: communication round index
-    :return: idxs_users (indices of $\mathcal{S}$), rnd_idx (indices of $\mathcal{A}$)
-    '''
-    # If reproducibility is needed
-    np.random.seed(args.seed+rnd)
-    random.seed(args.seed+rnd)
-
-    rnd_idx = []
-    if client_loss == [] or args.algo == 'rand':
-        # random selection in proportion to $p_k$ with replacement
-        idxs_users = np.random.choice(args.num_clients, p=data_ratios, size=args.clients_per_round, replace=True)
-
-    elif args.algo == 'randint':
-        # 'rand' for intermittent client availability
-        delete = 0.2
-        if (rnd % 2) == 0:
-            del_idx = np.random.choice(int(args.num_clients/2), size=int(delete*args.num_clients/2), replace=False)
-            search_idx = np.delete(np.arange(0, args.num_clients/2), del_idx)
-        else:
-            del_idx = np.random.choice(np.arange(args.num_clients/2, args.num_clients), size=int(delete*args.num_clients/2), replace=False)
-            search_idx = np.delete(np.arange(args.num_clients/2, args.num_clients), del_idx)
-
-        modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
-        idxs_users = np.random.choice(search_idx, p=modified_data_ratios, size=args.clients_per_round, replace=True)
-
-    elif args.algo == 'pow-d':
-        # standard power-of-choice strategy
-
-        # Step 1: select 'd' clients with probability proportional to their loss without replacement
-        rnd_idx = np.random.choice(args.num_clients, p=data_ratios, size=args.powd, replace=False)
-
-        # Step 2: sort the selected clients in descending order of their loss
-        repval = list(zip([client_loss[i] for i in rnd_idx], rnd_idx))
-        repval.sort(key=lambda x: x[0], reverse=True)
-        rep = list(zip(*repval))
-
-        # Step 3: select indices of top 'm' clients from the sorted list
-        idxs_users = rep[1][:int(args.clients_per_round)]
-
-    elif args.algo == 'rpow-d':
-        # computation/communication efficient variant of 'pow-d'
-
-        # Step 1: select 'd' clients with probability proportional to their loss without replacement
-        rnd_idx1 = np.random.choice(args.num_clients, p=data_ratios, size=args.powd, replace=False)
-
-        # Step 2: sort the selected clients in descending order of their proxy-loss
-        repval = list(zip([client_loss_proxy[i] for i in rnd_idx1], rnd_idx1))
-        repval.sort(key=lambda x: x[0], reverse=True)
-        rep = list(zip(*repval))
-
-        # Step 3: select indices of top 'm' clients from the sorted list
-        idxs_users = rep[1][:int(args.clients_per_round)]
-
-    elif args.algo == 'pow-dint':
-        # 'pow-d' for intermittent client availability
-        delete = 0.2
-        if (rnd % 2) == 0:
-            del_idx = np.random.choice(int(args.num_clients/2), size=int(delete*args.num_clients/2), replace=False)
-            search_idx = list(np.delete(np.arange(0, args.num_clients/2), del_idx))
-        else:
-            del_idx = np.random.choice(np.arange(args.num_clients/2, args.num_clients), size=int(delete*args.num_clients/2), replace=False)
-            search_idx = list(np.delete(np.arange(args.num_clients/2, args.num_clients), del_idx))
-
-        modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
-        rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=args.powd, replace=False)
-
-        repval = list(zip([client_loss[int(i)] for i in rnd_idx], rnd_idx))
-        repval.sort(key=lambda x: x[0], reverse=True)
-        rep = list(zip(*repval))
-        idxs_users = rep[1][:int(args.clients_per_round)]
-
-    elif args.algo == 'rpow-dint':
-        # 'rpow-d' for intermittent client availability
-        delete = 0.2
-        if (rnd % 2) == 0:
-            del_idx = np.random.choice(int(args.num_clients/2), size=int(delete*args.num_clients/2), replace=False)
-            search_idx = list(np.delete(np.arange(0, args.num_clients/2), del_idx))
-        else:
-            del_idx = np.random.choice(np.arange(args.num_clients/2, args.num_clients), size=int(delete*args.num_clients/2), replace=False)
-            search_idx = list(np.delete(np.arange(args.num_clients/2, args.num_clients), del_idx))
-
-        modified_data_ratios = [data_ratios[int(i)] for i in search_idx]/sum([data_ratios[int(i)] for i in search_idx])
-        rnd_idx = np.random.choice(search_idx, p=modified_data_ratios, size=args.powd, replace=False)
-
-        repval = list(zip([client_loss_proxy[int(i)] for i in rnd_idx], rnd_idx))
-        repval.sort(key=lambda x: x[0], reverse=True)
-        rep = list(zip(*repval))
-        idxs_users = rep[1][:int(args.clients_per_round)]
-
-    elif args.algo == 'afl':
-        # benchmark strategy
-        soft_temp = 0.01
-        sorted_loss_idx = np.argsort(client_loss_proxy)
-
-        for j in sorted_loss_idx[:int(args.delete_ratio*args.num_clients)]:
-            client_loss_proxy[j]=-np.inf
-
-        loss_prob = np.exp(soft_temp*client_loss_proxy)/sum(np.exp(soft_temp*client_loss_proxy))
-        idx1 = np.random.choice(int(args.num_clients), p=loss_prob, size = int(np.floor((1-args.rnd_ratio)*args.clients_per_round)),
-                                replace=False)
-
-        new_idx = np.delete(np.arange(0,args.num_clients),idx1)
-        idx2 = np.random.choice(new_idx, size = int(args.clients_per_round-np.floor((1-args.rnd_ratio)*args.clients_per_round)), replace=False)
-
-        idxs_users = list(idx1)+list(idx2)
-
-
-    return idxs_users, rnd_idx
-
-# not used!!
-def choices(population, weights=None, cum_weights=None, k=1):
-    """Return a k sized list of population elements chosen with replacement.
-    If the relative weights or cumulative weights are not specified,
-    the selections are made with equal probability.
-    """
-
-    if cum_weights is None:
-        if weights is None:
-            total = len(population)
-            result = []
-            for i in range(k):
-                random.seed(i)
-                result.extend(population[int(random.random() * total)])
-            return result
-        cum_weights = []
-        c = 0
-        for x in weights:
-            c += x
-            cum_weights.append(c)
-    elif weights is not None:
-        raise TypeError('Cannot specify both weights and cumulative weights')
-    if len(cum_weights) != len(population):
-        raise ValueError('The number of weights does not match the population')
-    total = cum_weights[-1]
-    hi = len(cum_weights) - 1
-    from bisect import bisect
-    result = []
-    for i in range(k):
-        random.seed(i)
-        result.extend(population[bisect(cum_weights, random.random() * total, 0, hi)])
-    return result
-
-# not used!!
-class Meter(object):
-    """ Computes and stores the average, variance, and current value """
-
-    def __init__(self, init_dict=None, ptag='Time', stateful=False,
-                 csv_format=True):
-        """
-        :param init_dict: Dictionary to initialize meter values
-        :param ptag: Print tag used in __str__() to identify meter
-        :param stateful: Whether to store value history and compute MAD
-        """
-        self.reset()
-        self.ptag = ptag
-        self.value_history = None
-        self.stateful = stateful
-        if self.stateful:
-            self.value_history = []
-        self.csv_format = csv_format
-        if init_dict is not None:
-            for key in init_dict:
-                try:
-                    # TODO: add type checking to init_dict values
-                    self.__dict__[key] = init_dict[key]
-                except Exception:
-                    print('(Warning) Invalid key {} in init_dict'.format(key))
-
-    def reset(self):
-        self.val = 0
-        self.avg = 0
-        self.sum = 0
-        self.count = 0
-        self.std = 0
-        self.sqsum = 0
-        self.mad = 0
-
-    def update(self, val, n=1):
-        self.val = val
-        self.sum += val * n
-        self.count += n
-        self.avg = self.sum / self.count
-        self.sqsum += (val ** 2) * n
-        if self.count > 1:
-            self.std = ((self.sqsum - (self.sum ** 2) / self.count)
-                        / (self.count - 1)
-                        ) ** 0.5
-        if self.stateful:
-            self.value_history.append(val)
-            mad = 0
-            for v in self.value_history:
-                mad += abs(v - self.avg)
-            self.mad = mad / len(self.value_history)
-
-    def __str__(self):
-        if self.csv_format:
-            if self.stateful:
-                return str('{dm.val:.3f},{dm.avg:.3f},{dm.mad:.3f}'
-                           .format(dm=self))
-            else:
-                return str('{dm.val:.3f},{dm.avg:.3f},{dm.std:.3f}'
-                           .format(dm=self))
-        else:
-            if self.stateful:
-                return str(self.ptag) + \
-                       str(': {dm.val:.3f} ({dm.avg:.3f} +- {dm.mad:.3f})'
-                           .format(dm=self))
-            else:
-                return str(self.ptag) + \
-                       str(': {dm.val:.3f} ({dm.avg:.3f} +- {dm.std:.3f})'
-                           .format(dm=self))
