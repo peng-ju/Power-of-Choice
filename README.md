@@ -24,6 +24,15 @@ export MLFLOW_TRACKING_USERNAME=<username>
 export MLFLOW_TRACKING_PASSWORD=<password/token>
 ```
 
+## Set the remote to our dvc remote. This will allow us to interact with DagsHub's DVC storage.
+
+```
+dvc remote add origin s3://dvc
+dvc remote modify origin  endpointurl https://dagshub.com/<username>/<repo-name>.s3
+dvc remote modify origin --local access_key_id <token>
+dvc remote modify origin --local secret_access_key <token>
+```
+
 ## Instructions
 
 1. Clone the repo.
