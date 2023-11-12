@@ -7,5 +7,6 @@ matplotlib==3.8.0
 tqdm==4.66.1
 pandas==2.1.2
 nltk==3.8.1
+mlflow==2.8.0
 torch --extra-index-url https://download.pytorch.org/whl/cu118
 torchvision --extra-index-url https://download.pytorch.org/whl/cu118

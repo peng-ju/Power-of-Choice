@@ -1,0 +1,15 @@
+artifact_uri: file:///home/peng/workspace/Power-of-Choice/quadratic_optimization/mlruns/450088843020131949/bcb817215bb9404d9aa52f847dc1b900/artifacts
+end_time: 1699827435773
+entry_point_name: ''
+experiment_id: '450088843020131949'
+lifecycle_stage: active
+run_id: bcb817215bb9404d9aa52f847dc1b900
+run_name: useful-loon-130
+run_uuid: bcb817215bb9404d9aa52f847dc1b900
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1699827435769
+status: 3
+tags: []
+user_id: a4783ad8fafddd0225c9e4c1e513fed63478a1da
