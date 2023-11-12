@@ -3,11 +3,26 @@
 reproduce the paper "Towards Understanding Biased Client Selection in Federated Learning"
 
 ## Activate virtual environment with Python3.10
-source venv/bin/activate 
 
+```
+source venv/bin/activate 
 deactivate
+```
 
 - python==3.10.13
+
+## Set DagsHub as MLflow server
+
+```
+export MLFLOW_TRACKING_USERNAME=<token>
+```
+
+or 
+
+```
+export MLFLOW_TRACKING_USERNAME=<username>
+export MLFLOW_TRACKING_PASSWORD=<password/token>
+```
 
 ## Instructions
 
