@@ -1,7 +1,6 @@
 ### Problem formulation for quadratic model optimization
-Question: how to make this a ML problem?
-
-
+- Question: how to make this a ML problem?
+- Note: it takes an average of 3 min to train 15000 epochs on a Intel i7-1370H CPU. Using MLflow to track the training metrix slows down the training by around 60 times, ending up taking 3 hours for the same training process.
 
 1, The local objective function/loss function of k-th client (out of totally K clients) is:
 
