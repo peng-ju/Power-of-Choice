@@ -30,6 +30,8 @@ Each clients takes $\tau$ gradient descent update with a fixed learning rate $\e
 
 ## Implementation
 
+- Try `quadratic_sim.ipynb` to implement quadratic optimization with different algorithms. 
+- Use `quadratic_sim_MLflow.ipynb` if you want to record the training process on Dagshub.
 - Note: it takes an average of 3 min to train 15000 epochs on a Intel i7-1370H CPU. Using MLflow to track the training metrix slows down the training by around 60 times, ending up taking 3 hours for the same training process.
 
 ### Hyperparameters
