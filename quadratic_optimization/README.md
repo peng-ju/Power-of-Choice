@@ -1,6 +1,4 @@
 ### Problem formulation for quadratic model optimization
-- Question: how to make this a ML problem?
-- Note: it takes an average of 3 min to train 15000 epochs on a Intel i7-1370H CPU. Using MLflow to track the training metrix slows down the training by around 60 times, ending up taking 3 hours for the same training process.
 
 1, The local objective function/loss function of k-th client (out of totally K clients) is:
 
@@ -29,3 +27,21 @@ $w^* = (\sum^K_{k=1} p_k H_k)^{-1} (\sum^K_{k=1} e_k) = (\sum^K_{k=1} e_k) / (\s
 3, For each communication round, we sample $m = int(C * K)$ clients and takes the average of local models to calculate global model: $\bar{w}^{t+1} = 1/m \sum_{k \in S^t} w^{t+1}_k$
 
 Each clients takes $\tau$ gradient descent update with a fixed learning rate $\eta$ before update to server/global model.
+
+## Implementation
+
+- Note: it takes an average of 3 min to train 15000 epochs on a Intel i7-1370H CPU. Using MLflow to track the training metrix slows down the training by around 60 times, ending up taking 3 hours for the same training process.
+
+### Hyperparameters
+
+```
+self.num_users = num_users # number of client
+self.frac = 0.1
+self.powd = powd # number of candidate for powd algorithm
+self.alpha = 3 # hyperparameter for the data distribution
+self.lr = 0.00002 # learning rate for statistical gradient descent.
+self.le = 2 # local update iteration
+self.epochs = epochs # num of communication rounds
+self.seltype = seltype # client selection strategies/algorithms.
+self.dim = 5 # dimension of the quadratic model
+```
