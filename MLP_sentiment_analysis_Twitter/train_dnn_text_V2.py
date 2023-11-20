@@ -72,13 +72,14 @@ def run(rank, size):
     print("\n dataratios: ", dataratios)
     # tracking client loss values, frequency for each client
 
+    # args.ensize -- number of clients
     client_freq, client_loss_proxy = np.zeros(args.ensize), np.zeros(args.ensize)
 
     # initialization for client selection
     cli_loss, cli_freq, cli_val = np.zeros(args.ensize)+1, np.zeros(args.ensize), np.zeros(args.ensize)
 
-    tmp_cli = [torch.tensor(0, dtype=torch.float32).to(device) for _ in range(args.size)]
-    tmp_clifreq = [torch.tensor(0).to(device) for _ in range(args.size)]
+    # tmp_cli = [torch.tensor(0, dtype=torch.float32).to(device) for _ in range(args.size)]
+    # tmp_clifreq = [torch.tensor(0).to(device) for _ in range(args.size)]
 
     # select client for the 1st round
     replace_param = False
@@ -90,7 +91,7 @@ def run(rank, size):
     # send = [torch.tensor(int(ii)).to(device) for ii in idxs_users]
 
     # define neural nets model
-    model = models.MLP_text(input_size=200, dim_hidden1=128, dim_hidden2 = 86, dim_hidden3 = 30, dim_out=args.num_classes).to(device)
+    model = models.MLP_text(input_size=200, dim_hidden1=128, dim_hidden2=86, dim_hidden3=30, dim_out=1).to(device)
     
     # allocate buffer for global and aggregate parameters
     # ref: https://discuss.pytorch.org/t/how-to-assign-an-arbitrary-tensor-to-models-parameter/44082/3
@@ -126,8 +127,10 @@ def run(rank, size):
 
     test_loss_rnd = []
     test_accu_rnd = []
-    rank_rnd = []
-    rnd_rnd = []
+    train_loss_rnd = []
+    train_accu_rnd = []
+    # rank_rnd = []
+    # rnd_rnd = []
 
 
     # start communication rounds
@@ -135,19 +138,19 @@ def run(rank, size):
         round_start = time.time()
 
         # (optional) decay learning rate according to round index
-        if args.decay == True:
-            # update_learning_rate(optimizer, rnd, args.lr)
-            if rnd == 160:
-                lr = args.lr/2
-                logging.info("Updating learning rate to {}".format(lr))
-                for param_group in optimizer.param_groups:
-                    param_group["lr"] = lr
+        # if args.decay == True:
+        #     # update_learning_rate(optimizer, rnd, args.lr)
+        #     if rnd == 160:
+        #         lr = args.lr/2
+        #         logging.info("Updating learning rate to {}".format(lr))
+        #         for param_group in optimizer.param_groups:
+        #             param_group["lr"] = lr
 
-            if rnd == 299:
-                lr = args.lr/4
-                logging.info("Updating learning rate to {}".format(lr))
-                for param_group in optimizer.param_groups:
-                    param_group["lr"] = lr
+        #     if rnd == 299:
+        #         lr = args.lr/4
+        #         logging.info("Updating learning rate to {}".format(lr))
+        #         for param_group in optimizer.param_groups:
+        #             param_group["lr"] = lr
 
         # zero aggregate parameters for accumulation of local parameters
         with torch.no_grad():
@@ -167,7 +170,7 @@ def run(rank, size):
             for t in range(args.localE):
                 singlebatch_loader = util.partitiondata_loader(partition, i, args.bs, traindata)
                 loss, model = train_text(rank, model, criterion, optimizer, singlebatch_loader, t)
-                loss_final += loss/args.localE
+                loss_final += loss/args.localE #average over localE iterations
             comm_update_end = time.time()
             update_time = comm_update_end - comm_update_start
 
@@ -230,11 +233,14 @@ def run(rank, size):
         # evaluate loss values and sync selected frequency
         cli_loss, cli_comptime = evaluate_client(model, criterion, partition, traindata)
         train_loss = sum([cli_loss[i]*dataratios[i] for i in range(args.ensize)])
-        train_loss1 = sum(cli_loss)/args.ensize
+        # train_loss1 = sum(cli_loss)/args.ensize
 
         # select clients for the next round
         sel_time, comp_time = 0, 0
         sel_time_start = time.time()
+        """
+        noteL cli_val, rnd are not useful?
+        """
         sel_idx, rnd_idx = util.sel_client(dataratios, cli_loss, cli_val, args, rnd)
         # print(f"len rnd_idx {len(rnd_idx)} idxs_users {len(idxs_users)}")
         sel_time_end = time.time()
@@ -304,8 +310,10 @@ def run(rank, size):
         
         test_loss_rnd.append(test_loss)
         test_accu_rnd.append(test_acc)
-        rank_rnd.append(rank)
-        rnd_rnd.append(rnd)
+        test_loss_rnd.append(train_loss)
+        test_accu_rnd.append(train_acc)
+        # rank_rnd.append(rank)
+        # rnd_rnd.append(rnd)
         
         # itr = -1 for overal result
         with open(args.out_fname, '+a') as f:
@@ -313,7 +321,7 @@ def run(rank, size):
                   '{filler},{filler},'
                   '{val:.4f},{other:.4f},{updtime:.4f},{comptime:.4f},{seltime:.4f},{entime:.4f}, {testacc:.4f}, {testloss:.4f}'
                   .format(ep=rnd, itr=-1, loss=test_loss, trainloss=train_loss,
-                          filler=-1, val=test_acc, other=train_loss1, updtime=update_time, comptime=comp_time,
+                          filler=-1, val=test_acc, other=train_loss, updtime=update_time, comptime=comp_time,
                           seltime=sel_time, entime=update_time+comp_time+sel_time, testacc=test_acc, testloss=test_loss), file=f)
 
 
@@ -352,7 +360,7 @@ def evaluate_client(model, criterion, partition, traindata):
             for batch_idx, (data, target) in enumerate(train_loader):
                 data = data.to(device,non_blocking=True)
                 target = target.to(device,non_blocking=True)
-                vec_target = vector_encoding(args.num_classes, target)
+                vec_target = vector_encoding(target)
                 # vec_target = target
 
                 vec_target = vec_target.to(device,non_blocking=True)
@@ -387,7 +395,7 @@ def evaluate(model, test_loader, criterion):
 
             data = data.to(device,non_blocking=True)
             target = target.to(device,non_blocking=True)
-            vec_target = vector_encoding(args.num_classes, target)
+            vec_target = vector_encoding(target)
             # vec_target = target
             
             vec_target = vec_target.to(device,non_blocking=True)
@@ -424,7 +432,7 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         data = data.to(device,non_blocking = True)
         target = target.to(device,non_blocking = True)
         # encode target
-        vec_target = vector_encoding(args.num_classes, target)
+        vec_target = vector_encoding(target)
         # vec_target = target
 
         vec_target = vec_target.to(device,non_blocking = True)
@@ -484,39 +492,24 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
     return los, model
 
 def get_label(x):
+    """
+    x : probability of been positive
+    return: predicted label
+    """
     res = torch.zeros_like(x)
     res[x>0.5] = 1
     
     return res
 
-def vector_encoding(num_class, target):
-    # """
-    # from number to class vector
-    
-    # target can be a vector
-    
-    # vector_encoding(args.num_classes, target)
-    # """
-    # vector = torch.zeros((target.size()[0]), num_class)
-    # for i in range(len(target)):
-    #     vector[i, int(target[i])] = 1.0
-    
+def vector_encoding(target):
+    """
+    This is a binary classification
+
     # 0 for positive, 1 for negative
+    """
     vector = torch.Tensor([1-i.item() for i in target])
     return vector
 
-
-
-# def init_processes(rank, size, fn):
-#     """ Initialize the distributed environment. """
-#     print('rank {} size {}'.format(rank, size))
-#     os.environ['MASTER_ADDR'] = 'localhost'
-#     os.environ['MASTER_PORT'] = '29500'
-#     dist.init_process_group(backend=args.backend, 
-#                             # init_method= "file:///root/workspace/Power-of-Choice/MLP_sentiment_analysis_Twitter/test/sharedfile", # args.initmethod, 
-#                             rank=rank, 
-#                             world_size=size)
-#     fn(rank, size)
 
 if __name__ == "__main__":
     rank = args.rank

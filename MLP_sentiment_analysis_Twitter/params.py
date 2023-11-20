@@ -1,7 +1,7 @@
 import argparse
 
 def args_parser():
-    parser = argparse.ArgumentParser(description='FMNIST baseline')
+    parser = argparse.ArgumentParser(description='Sent140')
     parser.add_argument('--name', '-n',
                         default="default",
                         type=str,
