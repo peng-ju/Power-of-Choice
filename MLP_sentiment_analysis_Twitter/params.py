@@ -27,7 +27,7 @@ def args_parser():
                         type=float,
                         help='global (server) momentum factor')
     parser.add_argument('--lr',
-                        default=0.05, # learning rate, stated in the paper
+                        default=0.01, # learning rate, stated in the paper
                         type=float,
                         help='client learning rate')
     parser.add_argument('--momentum',

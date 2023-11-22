@@ -252,7 +252,7 @@ def run(rank, size):
         # record metrics
         round_end = time.time()
         round_duration = round(round_end - round_start, 1)
-        logging.info(f"[{round_duration} s] Round {rnd} rank {rank} test accuracy {test_acc:.3f} test loss {test_loss:.3f}")
+        logging.info(f"[{round_duration} s] Round {rnd} rank {rank} test accuracy {test_acc:.3f} test loss {test_loss:.3f} train loss {train_loss:.3f}")
 
         # # Getting value function for client selection (required only for 'rpow-d', 'afl')
         # dist.barrier()      # TODO: implement multi-arm bandit
@@ -306,12 +306,12 @@ def run(rank, size):
         # sel_idx = int(send[rank])
 
         # record metrics
-        logging.info("Round {} rank {} test accuracy {:.3f} test loss {:.3f}".format(rnd, rank, test_acc, test_loss))
+        # logging.info("Round {} rank {} test accuracy {:.3f} test loss {:.3f}".format(rnd, rank, test_acc, test_loss))
         
         test_loss_rnd.append(test_loss)
         test_accu_rnd.append(test_acc)
         test_loss_rnd.append(train_loss)
-        test_accu_rnd.append(train_acc)
+        # test_accu_rnd.append(train_acc)
         # rank_rnd.append(rank)
         # rnd_rnd.append(rnd)
         
@@ -448,7 +448,7 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         batch_loss.backward()
 
         # gradient clipping
-        #torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10, norm_type=2)
+        # torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=10, norm_type=2)
 
         # gradient step
         optimizer.step()
@@ -479,14 +479,14 @@ def train_text(rank, model, criterion, optimizer, loader, epoch):
         #               .format(ep=epoch, itr=batch_idx,
         #                       loss=los, top1=acc), file=f)
 
-    with open(args.out_fname, '+a') as f:
-        print('{ep},{itr},'
-              '{loss:.4f},-1,-1,'
-              '{top1:.3f},-1,-1,-1,-1,-1,-1'
-              .format(ep=epoch, 
-                      itr=batch_idx,
-                      loss=los, 
-                      top1=acc), file=f)
+        with open(args.out_fname, '+a') as f:
+            print('{ep},{itr},'
+                '{loss:.4f},-1,-1,'
+                '{top1:.3f},-1,-1,-1,-1,-1,-1'
+                .format(ep=epoch, 
+                        itr=batch_idx,
+                        loss=los, 
+                        top1=acc), file=f)
 
     
     return los, model
@@ -508,6 +508,7 @@ def vector_encoding(target):
     # 0 for positive, 1 for negative
     """
     vector = torch.Tensor([1-i.item() for i in target])
+    # vector = torch.Tensor([i.item() for i in target])
     return vector
 
 

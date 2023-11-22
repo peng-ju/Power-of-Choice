@@ -125,7 +125,9 @@ def sel_client(DataRatios, cli_loss, cli_val, args, rnd):
 
     elif args.seltype == 'pow-d':
         # standard power-of-choice strategy
+        # get the candidate clients
         rnd_idx = np.random.choice(args.ensize, p=DataRatios, size=args.powd, replace=False)
+        # select top k clients with largest loss
         repval = list(zip([cli_loss[i] for i in rnd_idx], rnd_idx))
         repval.sort(key=lambda x: x[0], reverse=True)
         rep = list(zip(*repval)) # unpacking operator * to unzip the data
