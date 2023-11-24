@@ -166,32 +166,6 @@ def run(rank, size):
             client_freq[i] += 1
             client_loss_proxy[i] = loss_final
 
-        # Initialize hyperparameters
-        # local_epochs = args.localE
-        # weight = 1/args.size
-
-        # Clients locally train for several local epochs
-        # loss_final = 0
-
-        # comm_update_start = time.time()
-        # for t in range(args.localE):
-        #     singlebatch_loader = util.partitiondata_loader(partition, sel_idx, args.bs, traindata)
-        #     loss = train_text(rank, model, criterion, optimizer, singlebatch_loader, t)
-        #     loss_final += loss/args.localE
- 
-        #     comm_update_end = time.time()
-        #     update_time = comm_update_end - comm_update_start
-
-        #     # send local parameters from client `i` to server for aggregation
-        #     with torch.no_grad():
-        #         weight = 1/args.size # error maybe here
-        #         for aggregate_param, param in zip(aggregate_parameters, model.parameters()):
-        #             aggregate_param.add_(param, alpha=weight)
-
-        #     # update client frequency and loss values
-        #     client_freq[i] += 1
-        #     client_loss_proxy[i] = loss_final
-
         not_visited = np.where(client_freq == 0)[0]
         for j in not_visited:
             if args.seltype == "afl":
@@ -249,7 +223,6 @@ def run(rank, size):
                   .format(ep=rnd, itr=-1, loss=test_loss, trainloss=train_loss,
                           filler=-1, val=test_acc, other=train_loss, updtime=update_time, comptime=comp_time,
                           seltime=sel_time, entime=update_time+comp_time+sel_time, testacc=test_acc, testloss=test_loss), file=f)
-
 
 
 def evaluate_client(model, criterion, partition, traindata):
