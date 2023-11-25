@@ -41,6 +41,7 @@ def load_GloVe_twitter_emb(path_glove="embedding/glove.twitter.27B.200d.txt"):
 
 
 def load_twitter_datasets(minimum_tweets,
+                          args,
                           path_data_train="Sent140/traindata_sent140.csv", # path to train data
                           path_data_test="Sent140/testdata_sent140.csv" # path to train data
                           ):
@@ -71,7 +72,7 @@ def load_twitter_datasets(minimum_tweets,
 
     user_data = train.user
 
-    partition, ratios, entire = partition_datauser(user_data, minimum_tweets)
+    partition, ratios, entire = partition_datauser(user_data, minimum_tweets, args)
 
     train = train[["polarity", "tweet"]]
     train = train.iloc[entire]
@@ -338,7 +339,7 @@ def processAllTweets2tok(df, word2id, pad_length=40):
     return X, Y
 
 
-def partition_datauser(data_users, minimum_tweets):
+def partition_datauser(data_users, minimum_tweets, args):
     """
     partition the data based on user, tweeters from each user serve as the data for a client. 
 
@@ -385,12 +386,13 @@ def partition_datauser(data_users, minimum_tweets):
     # print("print partition:", partition_users)
     
     print("Randomly select 314 users from ", len(ratios), " candidates")
-    partition_users, ratios, entire = select_314user(partition_users, ratios, entire)
+    partition_users, ratios, entire = select_314user(partition_users, ratios, entire, args)
     # entire is selected data index
     return partition_users, ratios, entire
 
 
-def select_314user(partition_users, ratios, entire):
+def select_314user(partition_users, ratios, entire, args):
+    random.seed(args.seed)
     index_select = random.sample(list(partition_users.keys()), 314)
     partition_users_sel = {}
     ratios_sel = []

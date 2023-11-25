@@ -49,7 +49,7 @@ def partition_dataset(size, args, rnd):
         word2vectors, word2id = load_GloVe_twitter_emb()
         print("finish load Glove twitter embedding \n")
         # load the twitter dataset and splits in train/val/test
-        train, test, partition, ratio = load_twitter_datasets(args.minimum_tweets) # train and test
+        train, test, partition, ratio = load_twitter_datasets(args.minimum_tweets, args) # train and test
         Xtrain, Ytrain = processAllTweets2vec(train, word2vectors)
         Xtest, Ytest = processAllTweets2vec(test, word2vectors)
 
