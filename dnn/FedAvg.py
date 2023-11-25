@@ -10,7 +10,7 @@ import models
 from utils import FederatedDataset
 
 class FedAvg(object):
-    def __init__(self, lr, bs, localE, algo, commE, model, powd, num_clients, clients_per_round, 
+    def __init__(self, lr, bs, localE, algo, model, powd, num_clients, clients_per_round, 
                  dataset, num_classes, NIID, alpha, delete_ratio, rnd_ratio, seed, device=None):
         """ initialize federated optimizer """
         # hyperparameters
@@ -18,7 +18,6 @@ class FedAvg(object):
         self.bs = bs  # batch size
         self.localE = localE  # local epochs
         self.algo = algo  # client selection algorithm
-        self.commE = commE  # c-powd (true or false)
         self.powd = powd  # d (power of choice param)
         self.clients_per_round = clients_per_round  # clients per round, m
         self.num_clients = num_clients  # len(self.train_data.keys())  # number of clients, K
@@ -84,34 +83,20 @@ class FedAvg(object):
         return parameters
 
 
-    def eval(self, i, on_data='test'):
-        """ compute loss, acc for client `i` on train/test data """
-        self.model.eval()
-
-        # fetch data for client `i`
-        dataset = self.data.testset if on_data == 'test' else self.data.trainset
-        partitions = self.data.test_partitions if on_data == 'test' else self.data.train_partitions
-        if self.commE:
-            indices = random.sample(range(len(partitions[i])), k=int(min(self.bs, len(partitions[i]))))
-        else:
-            indices = partitions[i]
-        datasubset = Subset(dataset, indices=indices)
-        dataloader = DataLoader(datasubset,
-                                batch_size=len(datasubset),
-                                shuffle=True,
-                                pin_memory=True)
+    def eval(self, model, dataloader, criterion, device):
+        """ compute loss, acc for client `i` on train data """
+        model.eval()
 
         loss, correct, total = 0, 0, 0
         with torch.no_grad():
             for batch_idx, (X, y) in enumerate(dataloader):
-                X, y = X.to(self.device), y.to(self.device)
+                X, y = X.to(device), y.to(device)
                 
                 # foward pass
-                y_hat = self.model(X)
-                # torch.nn.functional.softmax(y_hat) == softmax(X@w)
+                y_hat = model(X)
 
                 # compute loss
-                loss_tmp = self.criterion(y_hat, y)
+                loss_tmp = criterion(y_hat, y)
                 loss += loss_tmp.item() * X.size(0)
 
                 # prediction
@@ -124,8 +109,8 @@ class FedAvg(object):
         acc = correct/total
         return loss, acc
 
-    def evaluate(self, on_data):
-        """ evaluate global loss and local losses for all clients """
+    def evaluate(self):
+        """ evaluate global and local metrics on train data """
         global_loss = 0
         global_acc = 0
         local_losses = []
@@ -135,7 +120,23 @@ class FedAvg(object):
         # compute loss for each client
         for i in range(self.num_clients):
             comptime_start = time.time()
-            loss_i, acc_i = self.eval(i, on_data)
+
+            # fetch data for client `i`
+            dataset = self.data.trainset
+            partitions = self.data.train_partitions
+            # NOTE: cpow-d should be active only for train data (not test data)
+            if self.algo == 'cpow-d' or self.algo == 'cpow-dint':
+                indices = random.sample(range(len(partitions[i])), k=min(self.bs, len(partitions[i])))
+            else:
+                indices = partitions[i]
+            datasubset = Subset(dataset, indices=indices)
+            dataloader = DataLoader(datasubset,
+                                    batch_size=len(datasubset),
+                                    shuffle=True,
+                                    pin_memory=True)
+
+            loss_i, acc_i = self.eval(self.model, dataloader, self.criterion, self.device)
+            
             client_comptime.append(time.time() - comptime_start)
             global_loss += loss_i * self.ratio[i]
             global_acc += acc_i * self.ratio[i]
@@ -143,6 +144,21 @@ class FedAvg(object):
             local_acc.append(acc_i)
 
         return global_loss, global_acc, local_losses, local_acc, client_comptime
+    
+    def evaluate_approx(self):
+        """ compute global metrics for test data """
+        self.model.eval()
+
+        # fetch full data
+        dataset = self.data.testset
+        dataloader = DataLoader(dataset,
+                                batch_size=min(self.bs, len(dataset)),
+                                shuffle=True,
+                                pin_memory=True)
+
+        loss, acc = self.eval(self.model, dataloader, self.criterion, self.device)
+
+        return loss, acc
 
     def train(self, i):
         """ compute loss, acc for client `i` on train data and run optimizer step """
@@ -260,7 +276,7 @@ class FedAvg(object):
             modified_data_ratios = [self.ratio[int(i)] for i in search_idx]/sum([self.ratio[int(i)] for i in search_idx])
             idxs_users = np.random.choice(search_idx, p=modified_data_ratios, size=self.clients_per_round, replace=True)
 
-        elif self.algo == 'pow-d' or self.algo == 'adapow-d':
+        elif self.algo in ['pow-d', 'cpow-d', 'adapow-d']:
             # standard power-of-choice strategy
 
             # Step 1: select 'd' clients with probability proportional to their loss without replacement
@@ -288,7 +304,7 @@ class FedAvg(object):
             # Step 3: select indices of top 'm' clients from the sorted list
             idxs_users = rep[1][:int(self.clients_per_round)]
 
-        elif self.algo == 'pow-dint':
+        elif self.algo == 'pow-dint':  # TODO: whether to include cpow-dint and adapow-dint???
             # 'pow-d' for intermittent client availability
             delete = 0.2
             if (rnd % 2) == 0:

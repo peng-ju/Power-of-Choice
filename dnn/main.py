@@ -40,7 +40,6 @@ def args_parser():
 
     # algo specific hyperparams
     parser.add_argument("--powd", default=6, type=int, help="number of selected subset workers per round ($d$)")
-    parser.add_argument("--commE", action="store_true", help="activation of $cpow-d$")
     # parser.add_argument("--momentum", default=0.0, type=float, help="local (client) momentum factor")
     # parser.add_argument("--mu", default=0, type=float, help="mu parameter in fedprox")
     # parser.add_argument("--gmf", default=0, type=float, help="global (server) momentum factor")
@@ -68,8 +67,6 @@ def run(rank, args):
     save_path = "./logs/"
     fracC = args.clients_per_round/args.num_clients
     fold = f"lr{args.lr:.4f}_bs{args.bs}_cp{args.localE}_a{args.alpha:.2f}_e{args.seed}_r0_n{args.num_clients}_f{fracC:.2f}/"
-    if args.commE:
-        fold = "com_"+fold
     folder_name = save_path + args.name + "/" + fold
     file_name = f"{args.algo}_rr{args.rnd_ratio:.2f}_dr{args.delete_ratio:.2f}_p{args.powd}_r{rank}.csv"
     os.makedirs(folder_name, exist_ok=True)
@@ -92,7 +89,7 @@ def run(rank, args):
     torch.backends.cudnn.deterministic = True
 
     # run federated learning experiment for given configuration
-    server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.commE, args.model, 
+    server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.model, 
                     args.powd, args.num_clients, args.clients_per_round, 
                     args.dataset, args.num_classes, args.NIID, args.alpha, 
                     args.delete_ratio, args.rnd_ratio, args.seed, args.device)
@@ -127,8 +124,8 @@ def run(rank, args):
         server.set_params(server.global_parameters)
 
         # evaluation
-        train_loss, train_acc, client_train_losses, client_train_accs, client_comp_times_train = server.evaluate('train')
-        test_loss, test_acc, client_test_losses, client_test_accs, client_comp_times_test = server.evaluate('test')
+        train_loss, train_acc, client_train_losses, client_train_accs, client_comp_times_train = server.evaluate()
+        test_loss, test_acc = server.evaluate_approx()
 
         ## bookkeeping
         # update client freq/loss values
@@ -167,7 +164,7 @@ if __name__ == '__main__':
 
 
     ## hyperparameters for synthetic data
-    args.name = 'test_synthetic'
+    args.name = 'test_synthetic_v1'
     args.model = 'LR'
     args.dataset = 'synthetic'
     args.num_classes = 10
@@ -189,27 +186,33 @@ if __name__ == '__main__':
     }
 
     # ## hyperparameters for fmnist data
-    # args.name = 'test_fmnist'
+    # args.name = 'fmnist_v1_lr_0.0005'
     # args.model = 'MLP'
     # args.dataset = 'fmnist'
     # args.num_classes = 10
     # args.num_clients = 100
-    # args.rounds = 10
+    # args.rounds = 300
     # args.clients_per_round = 3
     # args.bs = 64
-    # args.lr = 0.001
+    # args.lr = 0.0005
     # args.localE = 30
     # args.decay = [150, 300]  # decay after 150, 300 rounds
     # args.seed = 12345
     # args.NIID = True
-    # args.alpha = 2
+    # args.alpha = 2  # {2, 0.3}
     # ## experiment configurations for fmnist data
     # # key=experiment_id, value=(algo, m, powd, color, linestyle)
     # client_selection_type = {
+    #     # fig 4
     #     'rand': ('rand', 1, 'k', '-'),
-    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
-    #     'powd_3m': ('pow-d', args.clients_per_round*3, c_t(0), '--'),
-    #     # 'powd_5m': ('pow-d', args.clients_per_round*5, c_t(2), '--'),
+    #     'powd_2m': ('pow-d', 6, c_t(3), '-.'),
+    #     'powd_3m': ('pow-d', 9, c_t(0), '--'),
+    #     'powd_5m': ('pow-d', 15, c_t(2), ':'),
+    #     # # fig 5
+    #     # 'rand': ('rand', 1, 'k', '-'),
+    #     # 'powd_15': ('pow-d', 15, c_t(3), '-.'),
+    #     # 'cpowd_15': ('cpow-d', 15, c_t(0), '--'),
+    #     # 'rpowd_50': ('rpow-d', 50, c_t(2), ':'),
     # }
 
     # ## hyperparameters for cifar data
