@@ -1,5 +1,6 @@
 import logging
 import time
+import random
 import numpy as np
 
 import torch
@@ -9,7 +10,7 @@ import models
 from utils import FederatedDataset
 
 class FedAvg(object):
-    def __init__(self, lr, bs, localE, algo, model, powd, num_clients, clients_per_round, 
+    def __init__(self, lr, bs, localE, algo, commE, model, powd, num_clients, clients_per_round, 
                  dataset, num_classes, NIID, alpha, delete_ratio, rnd_ratio, seed, device=None):
         """ initialize federated optimizer """
         # hyperparameters
@@ -17,6 +18,7 @@ class FedAvg(object):
         self.bs = bs  # batch size
         self.localE = localE  # local epochs
         self.algo = algo  # client selection algorithm
+        self.commE = commE  # c-powd (true or false)
         self.powd = powd  # d (power of choice param)
         self.clients_per_round = clients_per_round  # clients per round, m
         self.num_clients = num_clients  # len(self.train_data.keys())  # number of clients, K
@@ -89,7 +91,11 @@ class FedAvg(object):
         # fetch data for client `i`
         dataset = self.data.testset if on_data == 'test' else self.data.trainset
         partitions = self.data.test_partitions if on_data == 'test' else self.data.train_partitions
-        datasubset = Subset(dataset, indices=partitions[i])
+        if self.commE:
+            indices = random.sample(range(len(partitions[i])), k=int(min(self.bs, len(partitions[i]))))
+        else:
+            indices = partitions[i]
+        datasubset = Subset(dataset, indices=indices)
         dataloader = DataLoader(datasubset,
                                 batch_size=len(datasubset),
                                 shuffle=True,

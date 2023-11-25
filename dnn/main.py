@@ -40,7 +40,7 @@ def args_parser():
 
     # algo specific hyperparams
     parser.add_argument("--powd", default=6, type=int, help="number of selected subset workers per round ($d$)")
-    # parser.add_argument("--commE", action="store_true", help="activation of $cpow-d$")  # TODO: add functionality
+    parser.add_argument("--commE", action="store_true", help="activation of $cpow-d$")
     # parser.add_argument("--momentum", default=0.0, type=float, help="local (client) momentum factor")
     # parser.add_argument("--mu", default=0, type=float, help="mu parameter in fedprox")
     # parser.add_argument("--gmf", default=0, type=float, help="global (server) momentum factor")
@@ -68,8 +68,8 @@ def run(rank, args):
     save_path = "./logs/"
     fracC = args.clients_per_round/args.num_clients
     fold = f"lr{args.lr:.4f}_bs{args.bs}_cp{args.localE}_a{args.alpha:.2f}_e{args.seed}_r0_n{args.num_clients}_f{fracC:.2f}/"
-    # if args.commE:  # TODO: yet to integrate commE
-    #     fold = "com_"+fold
+    if args.commE:
+        fold = "com_"+fold
     folder_name = save_path + args.name + "/" + fold
     file_name = f"{args.algo}_rr{args.rnd_ratio:.2f}_dr{args.delete_ratio:.2f}_p{args.powd}_r{rank}.csv"
     os.makedirs(folder_name, exist_ok=True)
@@ -92,7 +92,7 @@ def run(rank, args):
     torch.backends.cudnn.deterministic = True
 
     # run federated learning experiment for given configuration
-    server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.model, 
+    server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.commE, args.model, 
                     args.powd, args.num_clients, args.clients_per_round, 
                     args.dataset, args.num_classes, args.NIID, args.alpha, 
                     args.delete_ratio, args.rnd_ratio, args.seed, args.device)
@@ -165,27 +165,28 @@ def run(rank, args):
 if __name__ == '__main__':
     args = args_parser()
 
-    # ## hyperparameters for synthetic data
-    # args.name = 'test_synthetic'
-    # args.model = 'LR'
-    # args.dataset = 'synthetic'
-    # args.num_classes = 10
-    # args.num_clients = 30
-    # args.rounds = 800
-    # args.clients_per_round = 3
-    # args.bs = 50
-    # args.lr = 0.05  
-    # args.localE = 30
-    # args.decay = [300, 600] # decay after 300, 600 rounds
-    # args.seed = 12345
-    # ## experiment configurations for synthetic data
-    # # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    # client_selection_type = {
-    #     'rand': ('rand', 1, 'k', '-'),
-    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
-    #     'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
-    #     'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
-    # }
+
+    ## hyperparameters for synthetic data
+    args.name = 'test_synthetic'
+    args.model = 'LR'
+    args.dataset = 'synthetic'
+    args.num_classes = 10
+    args.num_clients = 30
+    args.rounds = 800
+    args.clients_per_round = 3
+    args.bs = 50
+    args.lr = 0.05  
+    args.localE = 30
+    args.decay = [300, 600] # decay after 300, 600 rounds
+    args.seed = 12345
+    ## experiment configurations for synthetic data
+    # key=experiment_id, value=(algo, m, powd, color, linestyle)
+    client_selection_type = {
+        'rand': ('rand', 1, 'k', '-'),
+        'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
+        'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
+        'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
+    }
 
     # ## hyperparameters for fmnist data
     # args.name = 'test_fmnist'
@@ -202,36 +203,36 @@ if __name__ == '__main__':
     # args.seed = 12345
     # args.NIID = True
     # args.alpha = 2
-    ## experiment configurations for fmnist data
-    # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    client_selection_type = {
-        'rand': ('rand', 1, 'k', '-'),
-        'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
-        'powd_3m': ('pow-d', args.clients_per_round*3, c_t(0), '--'),
-        # 'powd_5m': ('pow-d', args.clients_per_round*5, c_t(2), '--'),
-    }
+    # ## experiment configurations for fmnist data
+    # # key=experiment_id, value=(algo, m, powd, color, linestyle)
+    # client_selection_type = {
+    #     'rand': ('rand', 1, 'k', '-'),
+    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
+    #     'powd_3m': ('pow-d', args.clients_per_round*3, c_t(0), '--'),
+    #     # 'powd_5m': ('pow-d', args.clients_per_round*5, c_t(2), '--'),
+    # }
 
-    ## hyperparameters for cifar data
-    args.name = 'test_cifar'
-    args.model = 'CNN'
-    args.dataset = 'cifar'
-    args.num_classes = 10
-    args.num_clients = 100
-    args.rounds = 10
-    args.clients_per_round = 9
-    args.bs = 128
-    args.lr = 0.5
-    args.localE = 64
-    args.decay = [150, 300]  # decay after 150, 300 rounds
-    args.seed = 12345
-    args.NIID = True
-    args.alpha = 2
-    ## experiment configurations for cifar data
-    # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    client_selection_type = {
-        'rand': ('rand', 1, 'k', '-'),
-        'powd_20': ('pow-d', 20, c_t(3), '-.'),
-    }
+    # ## hyperparameters for cifar data
+    # args.name = 'test_cifar'
+    # args.model = 'CNN'
+    # args.dataset = 'cifar'
+    # args.num_classes = 10
+    # args.num_clients = 100
+    # args.rounds = 10
+    # args.clients_per_round = 9
+    # args.bs = 128
+    # args.lr = 0.5
+    # args.localE = 64
+    # args.decay = [150, 300]  # decay after 150, 300 rounds
+    # args.seed = 12345
+    # args.NIID = True
+    # args.alpha = 2
+    # ## experiment configurations for cifar data
+    # # key=experiment_id, value=(algo, m, powd, color, linestyle)
+    # client_selection_type = {
+    #     'rand': ('rand', 1, 'k', '-'),
+    #     'powd_20': ('pow-d', 20, c_t(3), '-.'),
+    # }
 
 
     ## define device
@@ -249,7 +250,6 @@ if __name__ == '__main__':
 
         args.algo = algo
         args.powd = powd
-        print('args.decay: ', args.decay, type(args.decay), type(args.decay[0]))
         tmp_filename = run(0, args)
         log_filenames.append(tmp_filename)
 
