@@ -163,57 +163,57 @@ if __name__ == '__main__':
     args = args_parser()
 
 
-    ## hyperparameters for synthetic data
-    args.name = 'test_synthetic_v1'
-    args.model = 'LR'
-    args.dataset = 'synthetic'
-    args.num_classes = 10
-    args.num_clients = 30
-    args.rounds = 800
-    args.clients_per_round = 3
-    args.bs = 50
-    args.lr = 0.05  
-    args.localE = 30
-    args.decay = [300, 600] # decay after 300, 600 rounds
-    args.seed = 12345
-    ## experiment configurations for synthetic data
-    # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    client_selection_type = {
-        'rand': ('rand', 1, 'k', '-'),
-        'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
-        'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
-        'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
-    }
-
-    # ## hyperparameters for fmnist data
-    # args.name = 'fmnist_v1_lr_0.0005'
-    # args.model = 'MLP'
-    # args.dataset = 'fmnist'
+    # ## hyperparameters for synthetic data
+    # args.name = 'test_synthetic_v1'
+    # args.model = 'LR'
+    # args.dataset = 'synthetic'
     # args.num_classes = 10
-    # args.num_clients = 100
-    # args.rounds = 300
+    # args.num_clients = 30
+    # args.rounds = 800
     # args.clients_per_round = 3
-    # args.bs = 64
-    # args.lr = 0.0005
+    # args.bs = 50
+    # args.lr = 0.05  
     # args.localE = 30
-    # args.decay = [150, 300]  # decay after 150, 300 rounds
+    # args.decay = [300, 600] # decay after 300, 600 rounds
     # args.seed = 12345
-    # args.NIID = True
-    # args.alpha = 2  # {2, 0.3}
-    # ## experiment configurations for fmnist data
+    # ## experiment configurations for synthetic data
     # # key=experiment_id, value=(algo, m, powd, color, linestyle)
     # client_selection_type = {
-    #     # fig 4
     #     'rand': ('rand', 1, 'k', '-'),
-    #     'powd_2m': ('pow-d', 6, c_t(3), '-.'),
-    #     'powd_3m': ('pow-d', 9, c_t(0), '--'),
-    #     'powd_5m': ('pow-d', 15, c_t(2), ':'),
-    #     # # fig 5
-    #     # 'rand': ('rand', 1, 'k', '-'),
-    #     # 'powd_15': ('pow-d', 15, c_t(3), '-.'),
-    #     # 'cpowd_15': ('cpow-d', 15, c_t(0), '--'),
-    #     # 'rpowd_50': ('rpow-d', 50, c_t(2), ':'),
+    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
+    #     'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
+    #     'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
     # }
+
+    ## hyperparameters for fmnist data
+    args.name = 'fmnist_5b_v1'
+    args.model = 'MLP'
+    args.dataset = 'fmnist'
+    args.num_classes = 10
+    args.num_clients = 100
+    args.rounds = 300
+    args.clients_per_round = 3
+    args.bs = 64
+    args.lr = 0.005
+    args.localE = 30
+    args.decay = [150, 300]  # decay after 150, 300 rounds
+    args.seed = 12345
+    args.NIID = True
+    args.alpha = 0.3  # {2 for (a), 0.3 for (b)}
+    ## experiment configurations for fmnist data
+    # key=experiment_id, value=(algo, m, powd, color, linestyle)
+    client_selection_type = {
+        # fig 4, 13, 15
+        'rand': ('rand', 1, 'k', '-'),
+        'powd_6': ('pow-d', 6, c_t(3), '-.'),
+        'powd_9': ('pow-d', 9, c_t(0), '--'),
+        'powd_15': ('pow-d', 15, c_t(2), ':'),
+        # # fig 5, 14, 16
+        # 'rand': ('rand', 1, 'k', '-'),
+        # 'powd_15': ('pow-d', 15, c_t(3), '-.'),
+        # 'cpowd_15': ('cpow-d', 15, c_t(0), '--'),
+        # 'rpowd_50': ('rpow-d', 50, c_t(2), ':'),
+    }
 
     # ## hyperparameters for cifar data
     # args.name = 'test_cifar'
