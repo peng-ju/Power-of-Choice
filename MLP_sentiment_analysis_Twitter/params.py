@@ -3,7 +3,7 @@ import argparse
 def args_parser():
     parser = argparse.ArgumentParser(description='Sent140')
     parser.add_argument('--name', '-n',
-                        default="default",
+                        default="20231125",
                         type=str,
                         help='experiment name, used for saving results')
     parser.add_argument('--backend',
@@ -122,6 +122,10 @@ def args_parser():
                         default='twitter',
                         type=str,
                         help='type of dataset')
+    parser.add_argument('--minimum_tweets',
+                        default=64,
+                        type=int,
+                        help='minimum_tweets to pre-select client')
 
     args = parser.parse_args()
 

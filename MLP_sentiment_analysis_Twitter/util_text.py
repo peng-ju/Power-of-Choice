@@ -6,7 +6,7 @@ import torch
 import torch.utils.data as data_utils
 
 from models import *
-from params import args_parser
+# from params import args_parser
 
 from data_preprocessing import *
 
@@ -49,7 +49,7 @@ def partition_dataset(size, args, rnd):
         word2vectors, word2id = load_GloVe_twitter_emb()
         print("finish load Glove twitter embedding \n")
         # load the twitter dataset and splits in train/val/test
-        train, test, partition, ratio = load_twitter_datasets() # train and test
+        train, test, partition, ratio = load_twitter_datasets(args.minimum_tweets) # train and test
         Xtrain, Ytrain = processAllTweets2vec(train, word2vectors)
         Xtest, Ytest = processAllTweets2vec(test, word2vectors)
 
@@ -99,6 +99,7 @@ def sel_client(DataRatios, cli_loss, cli_val, args, rnd):
     # If reproducibility is needed
     # rng1 = Random()
     # rng1.seed(seed)
+    np.random.seed(args.seed)
 
     rnd_idx = []
     if args.seltype == 'rand':

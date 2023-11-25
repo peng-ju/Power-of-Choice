@@ -40,9 +40,10 @@ def load_GloVe_twitter_emb(path_glove="embedding/glove.twitter.27B.200d.txt"):
     return word2vectors, word2id
 
 
-def load_twitter_datasets(path_data_train="Sent140/traindata_sent140.csv", # path to train data
-                         path_data_test="Sent140/testdata_sent140.csv" # path to train data
-                         ):
+def load_twitter_datasets(minimum_tweets,
+                          path_data_train="Sent140/traindata_sent140.csv", # path to train data
+                          path_data_test="Sent140/testdata_sent140.csv" # path to train data
+                          ):
 
     '''
         Loading twitter data from train and test file. Splitting train set to train and validation set.
@@ -70,7 +71,7 @@ def load_twitter_datasets(path_data_train="Sent140/traindata_sent140.csv", # pat
 
     user_data = train.user
 
-    partition, ratios, entire = partition_datauser(user_data)
+    partition, ratios, entire = partition_datauser(user_data, minimum_tweets)
 
     train = train[["polarity", "tweet"]]
     train = train.iloc[entire]
@@ -337,7 +338,7 @@ def processAllTweets2tok(df, word2id, pad_length=40):
     return X, Y
 
 
-def partition_datauser(data_users):
+def partition_datauser(data_users, minimum_tweets):
     """
     partition the data based on user, tweeters from each user serve as the data for a client. 
 
@@ -348,7 +349,7 @@ def partition_datauser(data_users):
     partition_users: tweeter user being selected and its data index
     ratios: data ratio based on the number of tweeter
     """
-    minimum_tweets = 64
+    # minimum_tweets = 64
     partition_users = {}
     user_idx, dum = 0, []
     count = 0
