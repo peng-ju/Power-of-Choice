@@ -43,6 +43,6 @@ dvc remote modify origin --local secret_access_key <token>
 5. Run Python script within your virtual environment.
 <!-- 5. All relevant code and instructions are in [`Example.ipynb`](/Example.ipynb). -->
 
-## Save and load model
+## Save and load model using MLflow
 
-
+Please refer to `MLflow_guide.ipynb` for detailed information.
