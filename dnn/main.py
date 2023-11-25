@@ -186,20 +186,20 @@ if __name__ == '__main__':
     # }
 
     ## hyperparameters for fmnist data
-    args.name = 'fmnist_4a_v1'
+    args.name = 'fmnist_13a_v1'
     args.model = 'MLP'
     args.dataset = 'fmnist'
     args.num_classes = 10
     args.num_clients = 100
     args.rounds = 300
     args.clients_per_round = 3
-    args.bs = 64
+    args.bs = 128
     args.lr = 0.005
     args.localE = 30
     args.decay = [150, 300]  # decay after 150, 300 rounds
     args.seed = 12345
     args.NIID = True
-    args.alpha = 0.3  # {2 for (a), 0.3 for (b)}
+    args.alpha = 2  # {2 for (a), 0.3 for (b)}
     ## experiment configurations for fmnist data
     # key=experiment_id, value=(algo, m, powd, color, linestyle)
     client_selection_type = {
