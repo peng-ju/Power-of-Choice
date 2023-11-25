@@ -348,6 +348,7 @@ def partition_datauser(data_users):
     partition_users: tweeter user being selected and its data index
     ratios: data ratio based on the number of tweeter
     """
+    minimum_tweets = 64
     partition_users = {}
     user_idx, dum = 0, []
     count = 0
@@ -360,7 +361,7 @@ def partition_datauser(data_users):
         if user != current_user:
             current_user = user
 
-            if len(dum)>=32:
+            if len(dum)>=minimum_tweets:
                 partition_users[user_idx] = np.arange(count, count+len(dum))
                 count += len(dum)
                 entire.extend(dum)
@@ -370,7 +371,7 @@ def partition_datauser(data_users):
         # dum stores the index of the data into a list
         dum.append(data_indices[data_idx])
 
-    if len(dum)>=32:
+    if len(dum)>=minimum_tweets:
         partition_users[user_idx] =  np.arange(count, count+len(dum))
         entire.extend(dum)
 
@@ -382,6 +383,7 @@ def partition_datauser(data_users):
     ratios = list(np.array(ratios)/sum(np.array(ratios)))
     # print("print partition:", partition_users)
     
+    print("Randomly select 314 users from ", len(ratios), " candidates")
     partition_users, ratios, entire = select_314user(partition_users, ratios, entire)
     # entire is selected data index
     return partition_users, ratios, entire

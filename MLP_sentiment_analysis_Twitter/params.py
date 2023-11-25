@@ -27,7 +27,7 @@ def args_parser():
                         type=float,
                         help='global (server) momentum factor')
     parser.add_argument('--lr',
-                        default=0.01, # learning rate, stated in the paper
+                        default=0.005, # learning rate, stated in the paper
                         type=float,
                         help='client learning rate')
     parser.add_argument('--momentum',
@@ -55,7 +55,7 @@ def args_parser():
                         type=int,
                         help='print info frequency')
     parser.add_argument('--size',
-                        default=8, # 3, selected clients for updating the model
+                        default=20, # 8, selected clients for updating the model
                         type=int,
                         help='number of local workers')
     parser.add_argument('--powd',
@@ -63,7 +63,7 @@ def args_parser():
                         type=int,
                         help='number of selected subset workers per round ($d$)')
     parser.add_argument('--fracC',
-                        default=0.1, # faction of 
+                        default=0.2, # faction of 0.1
                         type=float,
                         help='fraction of selected workers per round')
     parser.add_argument('--seltype',
