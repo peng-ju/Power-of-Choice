@@ -1,34 +1,22 @@
 import os
-import re
-import json
-from tqdm import tqdm
-import argparse
+import time
 import random
 import logging
-import time
-import pathlib
-
-import numpy as np
-import pandas as pd
+import argparse
 
 import torch
-import torch.distributed as dist
-import torch.utils.data.distributed
-import torch.nn as nn
-import torch.backends.cudnn as cudnn
-import torch.multiprocessing as mp
+import numpy as np
+from tqdm import tqdm
 
-from matplotlib import rcParams
-import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 c_t = cm.get_cmap('tab10')
 
 from FedAvg import FedAvg
+from plot import make_plot
 
 
 def args_parser():
     """ parse command line arguments """
-
     # basic parameters
     parser = argparse.ArgumentParser(description="FMNIST baseline")
     parser.add_argument("--name", "-n", default="default", type=str, help="experiment name, used for saving results")
@@ -45,7 +33,7 @@ def args_parser():
     # parser.add_argument("--constantE", action="store_true", help="whether all the local workers have an identical number of local epochs or not")  # TODO: add functionality
     parser.add_argument("--bs", default=64, type=int, help="batch size on each worker/client, $b$")
     parser.add_argument("--lr", default=0.1, type=float, help="client learning rate, $\eta$")
-    parser.add_argument("--decay", default=1, type=bool, help="1: decay LR, 0: no decay")
+    parser.add_argument('--decay', nargs='*', type=int, help='rounds to decay LR')
     parser.add_argument("--alpha", default=0.2, type=float, help="control the non-iidness of dataset")
     parser.add_argument("--NIID", action="store_true", help="whether the dataset is non-iid or not")
     # parser.add_argument("--p", "-p", action="store_true", help="whether the dataset is partitioned or not")
@@ -74,62 +62,6 @@ def args_parser():
     args = parser.parse_args()
     return args
 
-def make_plot(client_selection_type, logs, metric='train_loss'):
-    ## plot settings
-    # color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
-    # line styles reference: https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
-    ftsize = 16
-    params = {'legend.fontsize': ftsize,
-            'axes.labelsize': ftsize,
-            'axes.titlesize':ftsize,
-            'xtick.labelsize':ftsize,
-            'ytick.labelsize':ftsize}
-    plt.rcParams.update(params)
-    lw = 2
-    plt.rcParams["font.family"] = "Times New Roman"
-    plt.rcParams['axes.labelweight'] = 'bold'
-    # plt.figure(figsize=(16,14.5))
-    plt.figure()
-    plt.subplots_adjust(right=1.1, top=0.9)
-    rcParams['axes.titlepad'] = 14
-
-    for key, log_filename in zip(client_selection_type.keys(), logs):
-        # fetch configuration
-        algo, clients_per_round, powd, color, lstyle = client_selection_type[key]
-
-        # load metric data from json file
-        start_idx = 0
-        with open(log_filename, 'r') as f:
-            for line in f:
-                if line.startswith('rank,round,epoch,test_loss'):
-                    break
-                start_idx += 1
-
-        df = pd.read_csv(log_filename, skiprows=range(start_idx))  # dataframe starts from start_idx
-        values = df[df['epoch'] == -1][['round', metric]].sort_values(['round'])[metric].tolist()
-        
-        # plot global loss for each configuration
-        if algo =='rand' or algo =='adapow-d':
-            p_label = algo
-        else:
-            p_label = algo+', d={}'.format(powd)
-        plt.plot(values, lw=lw, color=color, ls = lstyle, label=p_label)
-
-    # update plot settings
-    plt.ylabel(f'Global {re.sub("_", " ", metric) + ("uracy" if metric.endswith("acc") else "")}')
-    plt.xlabel('Communication round')
-    plt.xticks()
-    plt.yticks()
-    loc = 'lower right' if metric.endswith('acc') else 'upper right'
-    plt.legend(loc=loc)
-    plt.grid()
-    plt.title('K=30, m={}'.format(clients_per_round))
-    # plt.show()
-    plot_filename = f'synthetic_m{clients_per_round}_{metric}.pdf'
-    plt.savefig(plot_filename, bbox_inches='tight')
-    print(f'saving plot to {plot_filename}')
-    
-    return
 
 def run(rank, args):
     # init logs directory
@@ -140,7 +72,7 @@ def run(rank, args):
     #     fold = "com_"+fold
     folder_name = save_path + args.name + "/" + fold
     file_name = f"{args.algo}_rr{args.rnd_ratio:.2f}_dr{args.delete_ratio:.2f}_p{args.powd}_r{rank}.csv"
-    pathlib.Path(folder_name).mkdir(parents=True, exist_ok=True)
+    os.makedirs(folder_name, exist_ok=True)
 
     # initiate log file
     args.out_fname = folder_name + file_name
@@ -174,11 +106,9 @@ def run(rank, args):
         round_start = time.time()
 
         # (optional) decay learning rate according to round index
-        if args.decay == True:
-            # update_learning_rate(optimizer, rnd, args.lr)
-            if rnd == 300 or rnd == 600:
-                for param_group in server.optimizer.param_groups:
-                    param_group["lr"] /= 2
+        if args.decay and rnd in args.decay:
+            for param_group in server.optimizer.param_groups:
+                param_group["lr"] /= 2
                     
         # reduce powd from K to m after half rounds (only for 'adapow-d')
         if args.algo == 'adapow-d' and rnd == args.rounds//2:
@@ -244,16 +174,17 @@ if __name__ == '__main__':
     args.rounds = 800
     args.clients_per_round = 3
     args.bs = 50
-    args.lr = 0.05  # decay after 300, 600 rounds
+    args.lr = 0.05  
+    args.decay = [300, 600] # decay after 300, 600 rounds
     args.seed = 12345
 
     ## experiment configurations for synthetic data
     # key=experiment_id, value=(algo, m, powd, color, linestyle)
     client_selection_type = {
-        'rand': ('rand', args.clients_per_round, 1, 'k', '-'),
-        'powd_2m': ('pow-d', args.clients_per_round, args.clients_per_round*2, c_t(3), '-.'),
-        'powd_10m': ('pow-d', args.clients_per_round, args.clients_per_round*10, c_t(0), '--'),
-        'adapow30': ('adapow-d', args.clients_per_round, args.num_clients, c_t(1), (0, (5, 10)))
+        'rand': ('rand', 1, 'k', '-'),
+        'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
+        'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
+        'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
     }
 
     # ## hyperparameters for fmnist data
@@ -265,7 +196,8 @@ if __name__ == '__main__':
     # args.rounds = 100
     # args.clients_per_round = 3
     # args.bs = 64
-    # args.lr = 0.005  # decay after 150, 300 rounds
+    # args.lr = 0.001  
+    # args.decay = [150, 300]  # decay after 150, 300 rounds
     # args.seed = 12345
 
     # args.NIID = True
@@ -274,10 +206,10 @@ if __name__ == '__main__':
     # ## experiment configurations for fmnist data
     # # key=experiment_id, value=(algo, m, powd, color, linestyle)
     # client_selection_type = {
-    #     'rand': ('rand', args.clients_per_round, 1, 'k', '-'),
-    #     'powd_2m': ('pow-d', args.clients_per_round, args.clients_per_round*2, c_t(3), '-.'),
-    #     'powd_3m': ('pow-d', args.clients_per_round, args.clients_per_round*3, c_t(0), '--'),
-    #     # 'powd_5m': ('pow-d', args.clients_per_round, args.clients_per_round*5, c_t(2), '--'),
+    #     'rand': ('rand', 1, 'k', '-'),
+    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
+    #     'powd_3m': ('pow-d', args.clients_per_round*3, c_t(0), '--'),
+    #     # 'powd_5m': ('pow-d', args.clients_per_round*5, c_t(2), '--'),
     # }
 
     # define device
@@ -286,18 +218,21 @@ if __name__ == '__main__':
     args.device = device
 
     ## run experiments
-    logs = []
+    log_filenames = []
     for key in client_selection_type.keys():
         # fetch configuration
-        algo, clients_per_round, powd, color, lstyle = client_selection_type[key]
+        algo, powd, color, lstyle = client_selection_type[key]
+        args.plot_linecolor = str(color)
+        args.plot_linestyle = str(lstyle)
 
         args.algo = algo
         args.powd = powd
+        print('args.decay: ', args.decay, type(args.decay), type(args.decay[0]))
         tmp_filename = run(0, args)
-        logs.append(tmp_filename)
+        log_filenames.append(tmp_filename)
 
     ## plot results
-    make_plot(client_selection_type, logs, 'train_loss')
-    make_plot(client_selection_type, logs, 'test_loss')
-    make_plot(client_selection_type, logs, 'train_acc')
-    make_plot(client_selection_type, logs, 'test_acc')
+    make_plot(log_filenames, 'train_loss')
+    make_plot(log_filenames, 'test_loss')
+    make_plot(log_filenames, 'train_acc')
+    make_plot(log_filenames, 'test_acc')

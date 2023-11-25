@@ -36,36 +36,33 @@ class FedAvg(object):
         
         # define model, criterion and initialize global parameters
         if model == 'LR':
-            self.model = torch.nn.Linear(self.dim, self.num_classes, bias=False)
+            self.model = torch.nn.Linear(self.dim, self.num_classes, bias=False).to(self.device)
             self.criterion = torch.nn.CrossEntropyLoss()
             
-            # (similar behavior if initialized to random values)
+            # we initialize to zeros for reproducibility of original paper
+            # though similar behavior if initialized to random values
             self.global_parameters = []
             with torch.no_grad():
                 for param in self.model.parameters():
                     self.global_parameters.append(torch.zeros_like(param))
         
-        elif model == 'MLP':
-            self.model = models.MLP_FMNIST(dim_in=self.dim, dim_hidden1=64, dim_hidden2 = 30, dim_out=self.num_classes).to(device)
+        elif model == 'MLP' or model == 'CNN':
+            if model == 'MLP':
+                self.model = models.MLP_FMNIST(dim_in=self.dim, dim_hidden1=64, dim_hidden2=30, dim_out=self.num_classes).to(self.device)
+            elif model == 'CNN':
+                self.model = models.CNN_Cifar(self.num_classes).to(self.device)
+
+            # defining loss function
             self.criterion = torch.nn.NLLLoss()
 
-            # Neural network doesn't train if initialized to zeros
+            # neural network doesn't train if initialized to zeros
+            # thus, we initialize to random values
             self.global_parameters = []
             with torch.no_grad():
                 for param in self.model.parameters():
                     self.global_parameters.append(param.detach().clone())
 
-        elif model == 'CNN':
-            model = models.CNNCifar(None) ## TODO: add input dim
-            self.criterion = torch.nn.NLLLoss()
-
-            # Neural network doesn't train if initialized to zeros
-            self.global_parameters = []
-            with torch.no_grad():
-                for param in self.model.parameters():
-                    self.global_parameters.append(param.detach().clone())
-
-        # defining the optimizer: here, SGD
+        # defining the optimizer
         self.optimizer = torch.optim.SGD(self.model.parameters(), lr=self.lr, weight_decay=10e-4)
 
 
@@ -78,11 +75,11 @@ class FedAvg(object):
 
     def get_params(self):
         """ get parameters of global model """
-        local_parameters = []
+        parameters = []
         with torch.no_grad():
-            for param in self.model.parameters():
-                local_parameters.append(param.detach().clone())
-        return local_parameters
+            for model_param in self.model.parameters():
+                parameters.append(model_param.detach().clone())
+        return parameters
 
 
     def eval(self, i, on_data='test'):
@@ -94,7 +91,7 @@ class FedAvg(object):
         partitions = self.data.test_partitions if on_data == 'test' else self.data.train_partitions
         datasubset = Subset(dataset, indices=partitions[i])
         dataloader = DataLoader(datasubset,
-                                batch_size=len(datasubset), #self.bs,
+                                batch_size=len(datasubset),
                                 shuffle=True,
                                 pin_memory=True)
 
@@ -122,11 +119,7 @@ class FedAvg(object):
         return loss, acc
 
     def evaluate(self, on_data):
-        """ evaluate global loss and local losses for all clients
-
-        local losses: loss for each client
-        global loss: average of all local client losses weighted by ratio p_k
-        """
+        """ evaluate global loss and local losses for all clients """
         global_loss = 0
         global_acc = 0
         local_losses = []
@@ -156,6 +149,7 @@ class FedAvg(object):
                                 shuffle=True,
                                 pin_memory=True)
         X, y = next(iter(dataloader))
+        X, y = X.to(self.device), y.to(self.device)
 
         # zero the gradients
         self.optimizer.zero_grad()
@@ -221,7 +215,7 @@ class FedAvg(object):
                     # option 2: similar behaviour but slightly different
                     # global_param.add_(param, alpha=1/len(client_params))
             
-            # average local parameters
+            # divide local parameters
             for global_param in self.global_parameters:
                 global_param.div_(len(client_params))
 

@@ -60,6 +60,8 @@ class SyntheticDataset(torch.utils.data.Dataset):
         else: 
             _, _, _, self.data = read_data(data_dir, data_dir)
         
+        # since the dataset is already partitioned, we maintain an index_map
+        # that maps (user_i, index_i) -> global_index
         self.data_indices = {}
         self.partitions = {}
         count = 0

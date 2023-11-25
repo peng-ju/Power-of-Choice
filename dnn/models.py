@@ -24,9 +24,9 @@ class MLP_FMNIST(nn.Module):
 
         return self.logsoftmax(x)
 
-class CNNCifar(nn.Module):
-    def __init__(self, args):
-        super(CNNCifar, self).__init__()
+class CNN_Cifar(nn.Module):
+    def __init__(self, num_classes):
+        super(CNN_Cifar, self).__init__()
         self.conv1 = nn.Conv2d(3, 6, 5)
         self.pool = nn.MaxPool2d(2, 2)
         self.conv2 = nn.Conv2d(6, 16, 5)
@@ -34,7 +34,7 @@ class CNNCifar(nn.Module):
         self.fc2 = nn.Linear(120, 100)
         self.fc3 = nn.Linear(100, 84)
         self.fc4 = nn.Linear(84, 50)
-        self.fc5 = nn.Linear(50, args.num_classes)
+        self.fc5 = nn.Linear(50, num_classes)
         self.logsoftmax = nn.LogSoftmax(dim=1)
 
     def forward(self, x):
