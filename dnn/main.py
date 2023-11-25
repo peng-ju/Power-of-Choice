@@ -165,27 +165,27 @@ def run(rank, args):
 if __name__ == '__main__':
     args = args_parser()
 
-    ## hyperparameters for synthetic data
-    args.name = 'test_synthetic'
-    args.model = 'LR'
-    args.dataset = 'synthetic'
-    args.num_classes = 10
-    args.num_clients = 30
-    args.rounds = 800
-    args.clients_per_round = 3
-    args.bs = 50
-    args.lr = 0.05  
-    args.decay = [300, 600] # decay after 300, 600 rounds
-    args.seed = 12345
-
-    ## experiment configurations for synthetic data
-    # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    client_selection_type = {
-        'rand': ('rand', 1, 'k', '-'),
-        'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
-        'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
-        'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
-    }
+    # ## hyperparameters for synthetic data
+    # args.name = 'test_synthetic'
+    # args.model = 'LR'
+    # args.dataset = 'synthetic'
+    # args.num_classes = 10
+    # args.num_clients = 30
+    # args.rounds = 800
+    # args.clients_per_round = 3
+    # args.bs = 50
+    # args.lr = 0.05  
+    # args.localE = 30
+    # args.decay = [300, 600] # decay after 300, 600 rounds
+    # args.seed = 12345
+    # ## experiment configurations for synthetic data
+    # # key=experiment_id, value=(algo, m, powd, color, linestyle)
+    # client_selection_type = {
+    #     'rand': ('rand', 1, 'k', '-'),
+    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
+    #     'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
+    #     'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
+    # }
 
     # ## hyperparameters for fmnist data
     # args.name = 'test_fmnist'
@@ -193,26 +193,48 @@ if __name__ == '__main__':
     # args.dataset = 'fmnist'
     # args.num_classes = 10
     # args.num_clients = 100
-    # args.rounds = 100
+    # args.rounds = 10
     # args.clients_per_round = 3
     # args.bs = 64
-    # args.lr = 0.001  
+    # args.lr = 0.001
+    # args.localE = 30
     # args.decay = [150, 300]  # decay after 150, 300 rounds
     # args.seed = 12345
-
     # args.NIID = True
     # args.alpha = 2
+    ## experiment configurations for fmnist data
+    # key=experiment_id, value=(algo, m, powd, color, linestyle)
+    client_selection_type = {
+        'rand': ('rand', 1, 'k', '-'),
+        'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
+        'powd_3m': ('pow-d', args.clients_per_round*3, c_t(0), '--'),
+        # 'powd_5m': ('pow-d', args.clients_per_round*5, c_t(2), '--'),
+    }
 
-    # ## experiment configurations for fmnist data
-    # # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    # client_selection_type = {
-    #     'rand': ('rand', 1, 'k', '-'),
-    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
-    #     'powd_3m': ('pow-d', args.clients_per_round*3, c_t(0), '--'),
-    #     # 'powd_5m': ('pow-d', args.clients_per_round*5, c_t(2), '--'),
-    # }
+    ## hyperparameters for cifar data
+    args.name = 'test_cifar'
+    args.model = 'CNN'
+    args.dataset = 'cifar'
+    args.num_classes = 10
+    args.num_clients = 100
+    args.rounds = 10
+    args.clients_per_round = 9
+    args.bs = 128
+    args.lr = 0.5
+    args.localE = 64
+    args.decay = [150, 300]  # decay after 150, 300 rounds
+    args.seed = 12345
+    args.NIID = True
+    args.alpha = 2
+    ## experiment configurations for cifar data
+    # key=experiment_id, value=(algo, m, powd, color, linestyle)
+    client_selection_type = {
+        'rand': ('rand', 1, 'k', '-'),
+        'powd_20': ('pow-d', 20, c_t(3), '-.'),
+    }
 
-    # define device
+
+    ## define device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # print(f"Using device: {device}")
     args.device = device

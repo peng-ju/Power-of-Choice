@@ -110,74 +110,77 @@ class FederatedDataset(object):
             x, y = self.trainset[0]
             self.input_dim = x.size(0)
 
-        elif dataset == 'fmnist':
-            # data
-            apply_transform = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,))])
-            self.trainset = torchvision.datasets.FashionMNIST(root='./data',
-                                                    train=True,
+        else:
+            if dataset == 'fmnist':
+                # data
+                apply_transform = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.1307,), (0.3081,))])
+                self.trainset = torchvision.datasets.FashionMNIST(root='./data',
+                                                        train=True,
+                                                        download=True,
+                                                        transform=apply_transform)
+
+                self.testset = torchvision.datasets.FashionMNIST(root='./data',
+                                                    train=False,
                                                     download=True,
                                                     transform=apply_transform)
 
-            self.testset = torchvision.datasets.FashionMNIST(root='./data',
-                                                train=False,
-                                                download=True,
-                                                transform=apply_transform)
-            
+            elif dataset == 'cifar':
+                # TODO: add data partitions
+                transform_train = transforms.Compose([
+                    transforms.RandomCrop(32, padding=4),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+                self.trainset = torchvision.datasets.CIFAR10(root='./data',
+                                                    train=True, 
+                                                    download=True, 
+                                                    transform=transform_train)
+                
+                transform_test = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
+                self.testset = torchvision.datasets.CIFAR10(root='./data',
+                                                train=False, 
+                                                download=True, 
+                                                transform=transform_test)
+
+            elif dataset == 'emnist':
+                # TODO: add data partitions
+                apply_transform = transforms.Compose([
+                    transforms.ToTensor(),
+                    transforms.Normalize((0.1307,), (0.3081,))])
+                self.trainset = torchvision.datasets.EMNIST(root='./data',
+                                                        split = 'digits',
+                                                        train=True,
+                                                        download=True,
+                                                        transform=apply_transform)
+
+                self.testset = torchvision.datasets.EMNIST(root='./data',
+                                                            split= 'digits',
+                                                            train=False,
+                                                            download=True,
+                                                            transform=apply_transform)
+                
             # partitions
             partition_sizes = [1.0 / num_clients for _ in range(num_clients)]
             partitioner = DataPartitioner(self.trainset, partition_sizes, seed, rnd, 
-                                               isNonIID, alpha, dataset)
+                                                isNonIID, alpha, dataset)
             self.train_partitions = partitioner.partitions
             partitioner_ = DataPartitioner(self.testset, partitioner.ratio, seed, rnd, 
-                                               False, 0, dataset)
+                                                False, 0, dataset)
             self.test_partitions = partitioner_.partitions
             
             # ratio
             self.ratio = partitioner.ratio  # Ratio of data sizes
-            print('fmnist Data ratio: %s' % str(self.ratio))
+            print('Data ratio: %s' % str(self.ratio))
             
             # input dim
             self.input_dim = np.prod(self.trainset[0][0].shape)
             print('input_dim:', self.input_dim)
 
-        elif dataset == 'cifar':
-            # TODO: add data partitions
-            transform_train = transforms.Compose([
-            transforms.RandomCrop(32, padding=4),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-            self.trainset = torchvision.datasets.CIFAR10(root='./data',
-                                                train=True, 
-                                                download=True, 
-                                                transform=transform_train)
-            
-            transform_test = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-            self.testset = torchvision.datasets.CIFAR10(root='./data',
-                                            train=False, 
-                                            download=True, 
-                                            transform=transform_test)
-
-        elif dataset == 'emnist':
-            # TODO: add data partitions
-            apply_transform = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Normalize((0.1307,), (0.3081,))])
-            self.trainset = torchvision.datasets.EMNIST(root='./data',
-                                                    split = 'digits',
-                                                    train=True,
-                                                    download=True,
-                                                    transform=apply_transform)
-
-            self.testset = torchvision.datasets.EMNIST(root='./data',
-                                                        split= 'digits',
-                                                        train=False,
-                                                        download=True,
-                                                        transform=apply_transform)
+        return
 
 
 class Partition(object):
