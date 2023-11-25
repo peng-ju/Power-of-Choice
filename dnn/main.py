@@ -186,7 +186,7 @@ if __name__ == '__main__':
     # }
 
     ## hyperparameters for fmnist data
-    args.name = 'fmnist_5b_v1'
+    args.name = 'fmnist_4a_v1'
     args.model = 'MLP'
     args.dataset = 'fmnist'
     args.num_classes = 10
