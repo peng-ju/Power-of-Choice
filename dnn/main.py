@@ -1,4 +1,5 @@
 import os
+import json
 import time
 import random
 import logging
@@ -50,6 +51,7 @@ def args_parser():
     # parser.add_argument("--print_freq", default=100, type=int, help="print info frequency")
     # parser.add_argument("--num_workers", default=0, type=int, help="number of workers for data loading")
     parser.add_argument("--seed", default=1, type=int, help="random seed")
+    parser.add_argument("--config", default=None, type=str, help="config file path")
     # parser.add_argument("--save", "-s", action="store_true", help="whether save the training results")
     
     # distributed setup  # TODO: add functionality
@@ -66,9 +68,9 @@ def run(rank, args):
     # init logs directory
     save_path = "./logs/"
     fracC = args.clients_per_round/args.num_clients
-    fold = f"lr{args.lr:.4f}_bs{args.bs}_cp{args.localE}_a{args.alpha:.2f}_e{args.seed}_r0_n{args.num_clients}_f{fracC:.2f}/"
+    fold = f"lr{args.lr:.4f}_bs{args.bs}_cp{args.localE}_a{args.alpha:.2f}_e{args.seed}_r0_n{args.num_clients:04d}_f{fracC:.2f}/"
     folder_name = save_path + args.name + "/" + fold
-    file_name = f"{args.algo}_rr{args.rnd_ratio:.2f}_dr{args.delete_ratio:.2f}_p{args.powd}_r{rank}.csv"
+    file_name = f"{args.algo}_rr{args.rnd_ratio:.2f}_dr{args.delete_ratio:.2f}_p{args.powd:04d}_r{rank}.csv"
     os.makedirs(folder_name, exist_ok=True)
 
     # initiate log file
@@ -80,6 +82,7 @@ def run(rank, args):
 
     logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
     logging.info("This message should appear on the console")
+    logging.info("Args: %s", args)
 
     # set seed for reproducibility
     random.seed(args.seed)
@@ -99,7 +102,7 @@ def run(rank, args):
     # tracking client loss values, frequency for each client
     client_freq, client_loss_proxy = np.zeros(args.num_clients), np.zeros(args.num_clients)
 
-    for rnd in tqdm(range(args.rounds), desc=key):
+    for rnd in tqdm(range(args.rounds), desc=args.key):
         round_start = time.time()
 
         # (optional) decay learning rate according to round index
@@ -160,104 +163,44 @@ def run(rank, args):
     return args.out_fname
 
 if __name__ == '__main__':
+    ## parse command line arguments
     args = args_parser()
-
-
-    # ## hyperparameters for synthetic data
-    # args.name = 'test_synthetic_v1'
-    # args.model = 'LR'
-    # args.dataset = 'synthetic'
-    # args.num_classes = 10
-    # args.num_clients = 30
-    # args.rounds = 800
-    # args.clients_per_round = 3
-    # args.bs = 50
-    # args.lr = 0.05  
-    # args.localE = 30
-    # args.decay = [300, 600] # decay after 300, 600 rounds
-    # args.seed = 12345
-    # ## experiment configurations for synthetic data
-    # # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    # client_selection_type = {
-    #     'rand': ('rand', 1, 'k', '-'),
-    #     'powd_2m': ('pow-d', args.clients_per_round*2, c_t(3), '-.'),
-    #     'powd_10m': ('pow-d', args.clients_per_round*10, c_t(0), '--'),
-    #     'adapow30': ('adapow-d', args.num_clients, c_t(1), (0, (5, 10)))
-    # }
-
-    ## hyperparameters for fmnist data
-    args.name = 'fmnist_13a_v1'
-    args.model = 'MLP'
-    args.dataset = 'fmnist'
-    args.num_classes = 10
-    args.num_clients = 100
-    args.rounds = 300
-    args.clients_per_round = 3
-    args.bs = 128
-    args.lr = 0.005
-    args.localE = 30
-    args.decay = [150, 300]  # decay after 150, 300 rounds
-    args.seed = 12345
-    args.NIID = True
-    args.alpha = 2  # {2 for (a), 0.3 for (b)}
-    ## experiment configurations for fmnist data
-    # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    client_selection_type = {
-        # fig 4, 13, 15
-        'rand': ('rand', 1, 'k', '-'),
-        'powd_6': ('pow-d', 6, c_t(3), '-.'),
-        'powd_9': ('pow-d', 9, c_t(0), '--'),
-        'powd_15': ('pow-d', 15, c_t(2), ':'),
-        # # fig 5, 14, 16
-        # 'rand': ('rand', 1, 'k', '-'),
-        # 'powd_15': ('pow-d', 15, c_t(3), '-.'),
-        # 'cpowd_15': ('cpow-d', 15, c_t(0), '--'),
-        # 'rpowd_50': ('rpow-d', 50, c_t(2), ':'),
-    }
-
-    # ## hyperparameters for cifar data
-    # args.name = 'test_cifar'
-    # args.model = 'CNN'
-    # args.dataset = 'cifar'
-    # args.num_classes = 10
-    # args.num_clients = 100
-    # args.rounds = 10
-    # args.clients_per_round = 9
-    # args.bs = 128
-    # args.lr = 0.5
-    # args.localE = 64
-    # args.decay = [150, 300]  # decay after 150, 300 rounds
-    # args.seed = 12345
-    # args.NIID = True
-    # args.alpha = 2
-    # ## experiment configurations for cifar data
-    # # key=experiment_id, value=(algo, m, powd, color, linestyle)
-    # client_selection_type = {
-    #     'rand': ('rand', 1, 'k', '-'),
-    #     'powd_20': ('pow-d', 20, c_t(3), '-.'),
-    # }
-
 
     ## define device
     device = "cuda" if torch.cuda.is_available() else "cpu"
     # print(f"Using device: {device}")
     args.device = device
 
-    ## run experiments
-    log_filenames = []
-    for key in client_selection_type.keys():
-        # fetch configuration
-        algo, powd, color, lstyle = client_selection_type[key]
-        args.plot_linecolor = str(color)
-        args.plot_linestyle = str(lstyle)
+    ## define a key for the experiment
+    args.key = "default"
 
-        args.algo = algo
-        args.powd = powd
-        tmp_filename = run(0, args)
-        log_filenames.append(tmp_filename)
+    ## run from config, if provided
+    if args.config:
+        if not os.path.exists(args.config):
+            raise ValueError(f"Config file '{args.config}' does not exist!")
+        
+        with open(args.config) as f:
+            config = json.load(f)
 
-    ## plot results
-    make_plot(log_filenames, 'train_loss')
-    make_plot(log_filenames, 'test_loss')
-    make_plot(log_filenames, 'train_acc')
-    make_plot(log_filenames, 'test_acc')
+        # set common vars
+        for key in config['common'].keys():
+            setattr(args, key, config['common'][key])
+
+        log_filenames = []
+        for expt in config['different'].keys():
+            args.key = expt
+            # set different vars
+            for key in config['different'][expt].keys():
+                setattr(args, key, config['different'][expt][key])
+
+            # run the configuration
+            tmp_filename = run(0, args)
+            log_filenames.append(tmp_filename)
+
+        ## plot results
+        for key in config['plots']:
+            make_plot(log_filenames, key)
+        
+    ## run from command line arguments otherwise
+    else:
+        run(0, args)
