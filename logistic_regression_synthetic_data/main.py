@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 from tqdm import tqdm
 import numpy as np
@@ -13,13 +14,13 @@ from setup_mlflow import get_experiment_id, MLFLOW_TRACKING_URI
 from FedAvg import FedAvg
 
 ## hyperparameters
-train_data_dir = './synthetic_data/'
-test_data_dir = './synthetic_data/'
+train_data_dir = '../data/synthetic_data/'
+test_data_dir = '../data/synthetic_data/'
 lr = 0.05  # learning rate, \eta
 bs = 50  # batch size, b
 le = 30  # local epoch, E
 total_rnd = 800  # total communication rounds, T/E
-clients_per_round = 1  # active clients per round, m
+clients_per_round = int(sys.argv[1])  # active clients per round, m
 K = 30  # number of clients, K
 SEED = 12345
 log_remote = False
