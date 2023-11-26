@@ -1,4 +1,4 @@
-            # Power-of-Choice
+# Power-of-Choice
 
 Reproducibility study of the paper "Towards Understanding Biased Client Selection in Federated Learning" by Yae Jee Cho, Jianyu Wang and Gauri Joshi.
 
