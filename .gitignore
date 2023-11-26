@@ -12,3 +12,4 @@ logs
 embedding
 slurm-*
 mlruns
+tmp
