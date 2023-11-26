@@ -8,6 +8,9 @@ import pandas as pd
 
 from matplotlib import rcParams
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
+c_t = cm.get_cmap('tab10')
+
 
 def make_plot(log_filenames, metric='train_loss'):
     ## plot settings
@@ -46,12 +49,12 @@ def make_plot(log_filenames, metric='train_loss'):
                     name = line.split(',')[1]
                 elif line.startswith('plot_linecolor'):
                     color = line[len('plot_linecolor,'):]
-                    if color.startswith('('):
-                        color = ast.literal_eval(color)
+                    if color.startswith('(') or color.startswith('c_t('):
+                        color = eval(color)
                 elif line.startswith('plot_linestyle'):
                     lstyle = line[len('plot_linestyle,'):]
                     if lstyle.startswith('('):
-                        lstyle = ast.literal_eval(lstyle)
+                        lstyle = eval(lstyle)
                 start_idx += 1
 
         df = pd.read_csv(log_filename, skiprows=range(start_idx))  # dataframe starts from start_idx
@@ -88,4 +91,25 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     log_filenames = glob(f'{args.logdir}/*.csv')
+
+    # sort log filenames in custom order [rand, pow-d*, cpow-d*, rpow-d*, adapow-d*, afl]
+    def sort_key(filename):
+        filename = filename.split('/')[-1]
+        if filename.startswith('rand'):
+            return 0
+        elif filename.startswith('pow-d'):
+            return 1
+        elif filename.startswith('cpow-d'):
+            return 2
+        elif filename.startswith('rpow-d'):
+            return 3
+        elif filename.startswith('adapow-d'):
+            return 4
+        elif filename.startswith('afl'):
+            return 5
+        else:
+            return 6
+    log_filenames.sort()
+    log_filenames.sort(key=sort_key)
+
     make_plot(log_filenames, args.metric)
