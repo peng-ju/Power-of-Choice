@@ -72,7 +72,7 @@ def make_plot(log_filenames, metric='train_loss'):
     loc = 'lower right' if metric.endswith('acc') else 'upper right'
     plt.legend(loc=loc)
     plt.grid()
-    plt.title('K=30, m={}'.format(clients_per_round))
+    # plt.title('K=30, m={}'.format(clients_per_round))
     # plt.show()
     directory = os.path.dirname(log_filenames[0])
     plot_filename = os.path.join(directory, f'{name}_{metric}.pdf')
