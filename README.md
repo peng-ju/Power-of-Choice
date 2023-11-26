@@ -1,4 +1,4 @@
-# Power-of-Choice
+            # Power-of-Choice
 
 Reproducibility study of the paper "Towards Understanding Biased Client Selection in Federated Learning" by Yae Jee Cho, Jianyu Wang and Gauri Joshi.
 
@@ -57,14 +57,9 @@ Note: you will need to activate the environment everytime you run our scripts. F
 ## Instructions
 To reproduce the results of the main paper, follow these steps:
 
-### Quadratic Expts
-Follow the readme guide for [./quadratic_optimization](./quadratic_optimization)
-
-### Logistic Expts on Synthetic Data
-Follow the readme guide for [./logistic_regression_synthetic_data](./logistic_regression_synthetic_data)
-
-### Image Classification Expts on FMNIST, CIFAR10 Data
-Follow the readme guide for [./dnn](./dnn)
+* **Quadratic Experiments**: Follow the readme guide for [./quadratic_optimization](./quadratic_optimization)
+* **Logistic Experiments on Synthetic Data**: Follow the readme guide for [./logistic_regression_synthetic_data](./logistic_regression_synthetic_data)
+* **Image Classification Expts on FMNIST, CIFAR10 Data**: Follow the readme guide for [./dnn](./dnn)
 
 
 ## Set DagsHub as MLflow server
