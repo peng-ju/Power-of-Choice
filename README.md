@@ -1,15 +1,71 @@
 # Power-of-Choice
 
-reproduce the paper "Towards Understanding Biased Client Selection in Federated Learning"
+Reproducibility study of the paper "Towards Understanding Biased Client Selection in Federated Learning" by Yae Jee Cho, Jianyu Wang and Gauri Joshi.
 
-## Activate virtual environment with Python3.10
+
+
+## Directory Structure
 
 ```
-source venv/bin/activate 
-deactivate
+.
+├── quadratic_optimization                      # Experiment 1: Quadratic optimization
+├── logistic_regression_synthetic_data          # Experiment 2: Logistic regression using synthetic data
+├── dnn                                         # Experiment 3: Image classification using FMNIST, CIFAR10 data
+├── MLP_sentiment_analysis_Twitter              # Experiment 4: MLP using Twitter data
+├── data
+├── MLflow_guide.ipynb                          # ML flow guide
+├── jee-cho22a.pdf                              # Original paper for reproducibility
+├── requirements.txt                            # PIP requirements file
+├── environment.yml                             # CONDA environment file
+├── .gitignore
+├── LICENSE
+└── README.md
 ```
 
-- python==3.10.13
+
+## Dataset
+All dataset files (except synthetic data) are automatically downloaded from their respective repositories. Synthetic data is included in our repository. No action is required for downloading/preprocessing any data.
+
+
+## Getting Started
+Install `conda` distribution for managing python packages. Create an environment:
+
+Step 1: Create and activate conda environment
+* `$ conda create -n myenv python=3.10 ipython ipykernel -y`
+* `$ conda activate myenv`
+* `$ python -m ipykernel install --user --name myenv --display-name "Python (myenv)"`
+
+Step 2.1: Install **PyTorch 2.0.1**, [reference](https://pytorch.org/get-started/previous-versions/#v201)
+* For Mac: `$ conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 -c pytorch -y`
+* For Windows/Ubuntu (CPU): `$ conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 cpuonly -c pytorch -y`
+* Verify install:  
+```bash
+$ python -c "import torch; print(f'Torch: {torch.__version__}\nCUDA: {torch.version.cuda}\nCUDA devices: {torch.cuda.device_count()}')"
+```
+
+Step 2.2: Install common packages
+* ML Toolkits: `$ conda install -c anaconda pandas numpy tqdm -y`
+* Misc: `conda install -c conda-forge matplotlib jupyterlab -y`
+* Verify install:
+```bash
+$ python -c "import pandas, numpy, tqdm, matplotlib; print ('Done')"
+```
+
+Note: you will need to activate the environment everytime you run our scripts. For jupyter notebook/lab, you need to select our custom kernel "Python (myenv)" created in Step 1.
+
+
+## Instructions
+To reproduce the results of the main paper, follow these steps:
+
+### Quadratic Expts
+Follow the readme guide for [./quadratic_optimization](./quadratic_optimization)
+
+### Logistic Expts on Synthetic Data
+Follow the readme guide for [./logistic_regression_synthetic_data](./logistic_regression_synthetic_data)
+
+### Image Classification Expts on FMNIST, CIFAR10 Data
+Follow the readme guide for [./dnn](./dnn)
+
 
 ## Set DagsHub as MLflow server
 
@@ -32,16 +88,6 @@ dvc remote modify origin  endpointurl https://dagshub.com/<username>/<repo-name>
 dvc remote modify origin --local access_key_id <token>
 dvc remote modify origin --local secret_access_key <token>
 ```
-
-## Instructions
-
-1. Make sure you have installed `python3.10.13` or do `sudo apt install Python3.10.13`.
-1. Clone the repo.
-2. (Recommended) Create and activate a [virtualenv](https://virtualenv.pypa.io/) under the `env/` directory. Git is already configured to ignore it.
-3. Install the very minimal requirements using `pip install -r requirements.txt`
-4. Run [Jupyter](https://jupyter.org/) in whatever way works for you. The simplest would be to run `pip install jupyter && jupyter notebook`.
-5. Run Python script within your virtual environment.
-<!-- 5. All relevant code and instructions are in [`Example.ipynb`](/Example.ipynb). -->
 
 ## Save and load model using MLflow
 
