@@ -1,0 +1,49 @@
+{
+    "common": {
+        "name": "fmnist_fig16b",
+        "model": "MLP",
+        "dataset": "fmnist",
+        "num_classes": 10,
+        "num_clients": 100,
+        "rounds": 400,
+        "clients_per_round": 3,
+        "localE": 100,
+        "bs": 64,
+        "lr": 0.0005,
+        "decay": [150, 300],
+        "seed": 12345,
+        "NIID": true,
+        "alpha": 0.3
+    },
+    "different": {
+        "rand": {
+            "algo": "rand",
+            "plot_linecolor": "k",
+            "plot_linestyle": "-"
+        },
+        "powd_15": {
+            "algo": "pow-d",
+            "powd": 15,
+            "plot_linecolor": "c_t(3)",
+            "plot_linestyle": "-."
+        },
+        "cpowd_15": {
+            "algo": "cpow-d",
+            "powd": 15,
+            "plot_linecolor": "c_t(0)",
+            "plot_linestyle": "--"
+        },
+        "rpowd_50": {
+            "algo": "rpow-d",
+            "powd": 50,
+            "plot_linecolor": "c_t(2)",
+            "plot_linestyle": ":"
+        }
+    },
+    "plots": [
+        "train_loss",
+        "test_loss",
+        "train_acc",
+        "test_acc"
+    ]
+}

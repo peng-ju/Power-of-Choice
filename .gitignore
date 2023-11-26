@@ -5,7 +5,7 @@ synthetic_data/
 __pycache__/
 /env/
 .DS_Store
-*.json
+# *.json
 *.pyc
 data
 logs

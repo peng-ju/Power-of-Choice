@@ -1,0 +1,47 @@
+{
+    "common": {
+        "name": "synthetic_fig3a",
+        "model": "LR",
+        "dataset": "synthetic",
+        "num_classes": 10,
+        "num_clients": 30,
+        "rounds": 800,
+        "clients_per_round": 1,
+        "localE": 30,
+        "bs": 50,
+        "lr": 0.05,
+        "decay": [300, 600],
+        "seed": 12345
+    },
+    "different": {
+        "rand": {
+            "algo": "rand",
+            "plot_linecolor": "k",
+            "plot_linestyle": "-"
+        },
+        "powd_2m": {
+            "algo": "pow-d",
+            "powd": 2,
+            "plot_linecolor": "c_t(3)",
+            "plot_linestyle": "-."
+        },
+        "powd_10m": {
+            "algo": "pow-d",
+            "powd": 10,
+            "plot_linecolor": "c_t(0)",
+            "plot_linestyle": "--"
+        },
+        "adapow30": {
+            "algo": "adapow-d",
+            "powd": 30,
+            "plot_linecolor": "c_t(1)",
+            "plot_linestyle": "(0, (5, 10))"
+        }
+    },
+    "plots": [
+        "train_loss",
+        "test_loss",
+        "train_acc",
+        "test_acc"
+    ]
+}
