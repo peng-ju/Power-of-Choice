@@ -93,7 +93,7 @@ class FederatedDataset(object):
 
         if dataset == 'synthetic':
             # data
-            self.trainset = SyntheticDataset('./synthetic_data/', train=True)
+            self.trainset = SyntheticDataset('./synthetic_data/', train=True)  # TODO: needs to be update to `../data/synthetic_data/`
             self.testset = SyntheticDataset('./synthetic_data/', train=False)
 
             # partitions
