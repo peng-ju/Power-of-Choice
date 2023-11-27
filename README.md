@@ -9,7 +9,7 @@ Reproducibility study of the paper "Towards Understanding Biased Client Selectio
 ├── logistic_regression_synthetic_data          # Experiment 2: Logistic regression using synthetic data
 ├── dnn                                         # Experiment 3: Image classification using FMNIST, CIFAR10 data
 ├── MLP_sentiment_analysis_Twitter              # Experiment 4: MLP using Twitter data
-├── data
+├── data                                        # synthetic data
 ├── MLflow_guide.ipynb                          # ML flow guide
 ├── jee-cho22a.pdf                              # Original paper for reproducibility
 ├── requirements.txt                            # PIP requirements file
