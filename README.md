@@ -1,11 +1,8 @@
 # Power-of-Choice
-
 Reproducibility study of the paper "Towards Understanding Biased Client Selection in Federated Learning" by Yae Jee Cho, Jianyu Wang and Gauri Joshi.
 
 
-
 ## Directory Structure
-
 ```
 .
 ├── quadratic_optimization                      # Experiment 1: Quadratic optimization
@@ -28,7 +25,9 @@ All dataset files (except synthetic data) are automatically downloaded from thei
 
 
 ## Getting Started
-Install `conda` distribution for managing python packages. Create an environment:
+We highly recommending setting up the environment through following commands instead of using `environment.yml` or `requirements.txt` to avoid issues arising from different architectures/machines.  
+
+To get started, install `conda` distribution for managing python packages. Create an environment:
 
 Step 1: Create and activate conda environment
 * `$ conda create -n myenv python=3.10 ipython ipykernel -y`
@@ -63,7 +62,6 @@ To reproduce the results of the main paper, follow these steps:
 
 
 ## Set DagsHub as MLflow server
-
 ```
 export MLFLOW_TRACKING_USERNAME=<token>
 ```
@@ -76,7 +74,6 @@ export MLFLOW_TRACKING_PASSWORD=<password/token>
 ```
 
 ## Set the remote to our dvc remote. This will allow us to interact with DagsHub's DVC storage.
-
 ```
 dvc remote add origin s3://dvc
 dvc remote modify origin  endpointurl https://dagshub.com/<username>/<repo-name>.s3
@@ -85,5 +82,4 @@ dvc remote modify origin --local secret_access_key <token>
 ```
 
 ## Save and load model using MLflow
-
 Please refer to `MLflow_guide.ipynb` for detailed information.
