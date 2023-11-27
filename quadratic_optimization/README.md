@@ -1,10 +1,10 @@
 ## Directory Structure
 ```
 .
-├── quadratic_sim.ipynb                      # Quadratic optimization jupyter notebook
-├── quadratic_sim_MLflow.ipynb               # Quadratic optimization jupyter notebook. Use MLflow to tracking training metric and hyperparameters.
-├── quadoption.py                            # args_parser for quadratic_sim.py
-├── quadratic_sim.py                         # python script for Quadratic optimization
+├── quadratic_sim.ipynb                 # Quadratic optimization jupyter notebook
+├── quadratic_sim_MLflow.ipynb          # Quadratic optimization jupyter notebook. Use MLflow to tracking training metric and hyperparameters.
+├── quadoption.py                       # args_parser for quadratic_sim.py
+├── quadratic_sim.py                    # python script for Quadratic optimization
 ├── figures        
 └── README.md
 ```

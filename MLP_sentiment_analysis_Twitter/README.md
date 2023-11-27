@@ -1,3 +1,17 @@
+## Directory Structure
+```
+├── train_dnn_text_MLflow.py                   # sentiment analysis jupyter notebook. Use MLflow to tracking training metric, hyperparameters and model.
+├── plot_res.ipynb                             # jupyter notebook to produce figures
+├── train_dnn_text_V3.py                       # python script for sentiment analysis
+├── params.py                                  # args_parser for train_dnn_text_V3.py
+├── util_text.py                               # utils functions for sentiment analysis
+├── models.py                                  # models
+├── data_preprocessing.py                      # text data cleaning for sentiment analysis
+├── Sent140                                    # raw data for sentiment analysis
+├── comm_helpers.py
+├── README.md
+```
+
 ### Dataset Sent140 is download from "http://help.sentiment140.com/for-students"
 
 ### Glove from "https://nlp.stanford.edu/projects/glove/"
