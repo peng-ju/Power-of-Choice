@@ -17,3 +17,4 @@ To reproduce Figure 3 from the main paper, follow these steps:
 * Activate the env: `$ conda activate myenv`
 * For Figure 3(a): run `$ python main.py 1` to obtain `synthetic_m=1.pdf`
 * For Figure 3(b): run `$ python main.py 3` to obtain `synthetic_m=3.pdf`
+* Each figure takes only a few mins to complete.

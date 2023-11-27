@@ -19,3 +19,4 @@ To reproduce, for instance, Figure 4(a) from the main paper, follow these steps:
 * Activate the env: `$ conda activate myenv`
 * The hyperparameter configuration is present in `configs/fig4a.json`
 * Obtains plots in logs directory: `$ python main.py --config configs/fig4a.json`
+* Each configuration (except fig3a/fig3b) take around 1.5hrs to complete. Fig3a/3b take only a few mins.
