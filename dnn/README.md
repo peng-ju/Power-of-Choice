@@ -15,7 +15,7 @@
 
 
 ## Instructions
-To reproduce Figure 4(a) from the main paper, follow these steps:
+To reproduce, for instance, Figure 4(a) from the main paper, follow these steps:
 * Activate the env: `$ conda activate myenv`
 * The hyperparameter configuration is present in `configs/fig4a.json`
 * Obtains plots in logs directory: `$ python main.py --config configs/fig4a.json`
