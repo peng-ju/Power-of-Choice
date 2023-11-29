@@ -57,9 +57,9 @@ Note: you will need to activate the environment everytime you run our scripts. F
 To reproduce the experimental results of the main paper, follow these steps:
 
 * **Quadratic simulations**: Follow the readme guide for [`./quadratic_optimization`](./quadratic_optimization)
-* **Logistic Regression on Synthetic Data**: Follow the readme guide for `[./logistic_regression](./logistic_regression)`
-* **Image Classification on FMNIST, CIFAR10 Data**: Follow the readme guide for `[./image_classification](./image_classification)`
-* **Sentiment Analysis on Twitter Data**: Follow the readme guide for `[./sentiment_analysis](./sentiment_analysis)`
+* **Logistic Regression on Synthetic Data**: Follow the readme guide for [`./logistic_regression`](./logistic_regression)
+* **Image Classification on FMNIST, CIFAR10 Data**: Follow the readme guide for [`./image_classification`](./image_classification)
+* **Sentiment Analysis on Twitter Data**: Follow the readme guide for [`./sentiment_analysis`](./sentiment_analysis)
 
 
 ## Custom Experiment
