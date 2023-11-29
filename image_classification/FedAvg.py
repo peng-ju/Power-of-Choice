@@ -7,7 +7,7 @@ import torch
 from torch.utils.data import DataLoader, Dataset, Subset
 
 import models
-from utils import FederatedDataset
+from data_utils import FederatedDataset
 
 class FedAvg(object):
     def __init__(self, lr, bs, localE, algo, model, powd, num_clients, clients_per_round, 

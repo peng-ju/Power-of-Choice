@@ -1,19 +1,19 @@
 # Power-of-Choice
-Reproducibility study of the paper "Towards Understanding Biased Client Selection in Federated Learning" by Yae Jee Cho, Jianyu Wang and Gauri Joshi.
+Reproducibility study of the paper ["Towards Understanding Biased Client Selection in Federated Learning"](./jee-cho22a.pdf) by Yae Jee Cho, Jianyu Wang and Gauri Joshi.
 
 
 ## Directory Structure
 ```
 .
-├── quadratic_optimization                      # Experiment 1: Quadratic optimization
-├── logistic_regression_synthetic_data          # Experiment 2: Logistic regression using synthetic data
-├── dnn                                         # Experiment 3: Image classification using FMNIST, CIFAR10 data
-├── MLP_sentiment_analysis_Twitter              # Experiment 4: MLP using Twitter data
-├── data                                        # synthetic data
-├── MLflow_guide.ipynb                          # ML flow guide
-├── jee-cho22a.pdf                              # Original paper for reproducibility
-├── requirements.txt                            # PIP requirements file
-├── environment.yml                             # CONDA environment file
+├── quadratic_optimization            # Experiment 1: Quadratic simulations
+├── logistic_regression               # Experiment 2: Logistic regression using synthetic data
+├── image_classification              # Experiment 3: Image classification using FMNIST, CIFAR10 data
+├── sentiment_analysis                # Experiment 4: Sentiment analysis using Twitter data
+├── data                              # synthetic data
+├── MLflow_guide.ipynb                # ML flow guide
+├── jee-cho22a.pdf                    # Original paper for reproducibility
+├── requirements.txt                  # PIP requirements file
+├── environment.yml                   # CONDA environment file
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -54,11 +54,16 @@ Note: you will need to activate the environment everytime you run our scripts. F
 
 
 ## Instructions
-To reproduce the results of the main paper, follow these steps:
+To reproduce the experimental results of the main paper, follow these steps:
 
-* **Quadratic Experiments**: Follow the readme guide for [./quadratic_optimization](./quadratic_optimization)
-* **Logistic Experiments on Synthetic Data**: Follow the readme guide for [./logistic_regression_synthetic_data](./logistic_regression_synthetic_data)
-* **Image Classification Expts on FMNIST, CIFAR10 Data**: Follow the readme guide for [./dnn](./dnn)
+* **Quadratic simulations**: Follow the readme guide for [`./quadratic_optimization`](./quadratic_optimization)
+* **Logistic Regression on Synthetic Data**: Follow the readme guide for `[./logistic_regression](./logistic_regression)`
+* **Image Classification on FMNIST, CIFAR10 Data**: Follow the readme guide for `[./image_classification](./image_classification)`
+* **Sentiment Analysis on Twitter Data**: Follow the readme guide for `[./sentiment_analysis](./sentiment_analysis)`
+
+
+## Custom Experiment
+To write your own custom federated learning experiment, you may reuse the codebase/pipeline for `image_classification`. Under this directory, add your custom dataset to `data_utils.py`, write your custom client selection algorithm in `FedAvg.py`, specify custom hyperparams in a new config file `custom.json` and you're ready to run your experiment by `$ python main.py -c configs/custom.json`
 
 
 ## Set DagsHub as MLflow server
@@ -73,13 +78,6 @@ export MLFLOW_TRACKING_USERNAME=<username>
 export MLFLOW_TRACKING_PASSWORD=<password/token>
 ```
 
-## Set the remote to our dvc remote. This will allow us to interact with DagsHub's DVC storage.
-```
-dvc remote add origin s3://dvc
-dvc remote modify origin  endpointurl https://dagshub.com/<username>/<repo-name>.s3
-dvc remote modify origin --local access_key_id <token>
-dvc remote modify origin --local secret_access_key <token>
-```
 
 ## Save and load model using MLflow
 Please refer to `MLflow_guide.ipynb` for detailed information.
