@@ -93,8 +93,8 @@ class FederatedDataset(object):
 
         if dataset == 'synthetic':
             # data
-            self.trainset = SyntheticDataset('./synthetic_data/', train=True)  # TODO: needs to be update to `../data/synthetic_data/`
-            self.testset = SyntheticDataset('./synthetic_data/', train=False)
+            self.trainset = SyntheticDataset('../data/synthetic_data/', train=True)
+            self.testset = SyntheticDataset('../data/synthetic_data/', train=False)
 
             # partitions
             self.train_partitions = self.trainset.partitions
@@ -116,12 +116,12 @@ class FederatedDataset(object):
                 apply_transform = transforms.Compose([
                     transforms.ToTensor(),
                     transforms.Normalize((0.1307,), (0.3081,))])
-                self.trainset = torchvision.datasets.FashionMNIST(root='./data',
+                self.trainset = torchvision.datasets.FashionMNIST(root='../data',
                                                         train=True,
                                                         download=True,
                                                         transform=apply_transform)
 
-                self.testset = torchvision.datasets.FashionMNIST(root='./data',
+                self.testset = torchvision.datasets.FashionMNIST(root='../data',
                                                     train=False,
                                                     download=True,
                                                     transform=apply_transform)

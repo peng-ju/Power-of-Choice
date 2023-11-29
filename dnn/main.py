@@ -51,7 +51,7 @@ def args_parser():
     # parser.add_argument("--print_freq", default=100, type=int, help="print info frequency")
     # parser.add_argument("--num_workers", default=0, type=int, help="number of workers for data loading")
     parser.add_argument("--seed", default=1, type=int, help="random seed")
-    parser.add_argument("--config", default=None, type=str, help="config file path")
+    parser.add_argument("--config", "-c", default=None, type=str, help="config file path")
     # parser.add_argument("--save", "-s", action="store_true", help="whether save the training results")
     
     # distributed setup  # TODO: add functionality
