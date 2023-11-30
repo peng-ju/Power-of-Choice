@@ -1,18 +1,20 @@
 #!/bin/bash
 
 ## resources needed ##
-#SBATCH --account=gpu            # queue to be used
+#SBATCH --account=cuda-gpu            # queue: {mctesla-gpu, cuda-gpu, gorman-gpu, gpu}
 #SBATCH --job-name=powd-expts    # create a short name for your job, `job-identifier`
-#SBATCH --nodes=1                # node count
-#SBATCH --ntasks=1               # total number of tasks across all nodes
-#SBATCH --cpus-per-task=8        # cpu-cores per task (>1 if multi-threaded tasks)
-#SBATCH --gres=gpu:1             # number of gpus per node
 #SBATCH --time=00:05:00          # total run time limit (HH:MM:SS)
 
 ## setup environment ##
-# module purge
-module load cuda cudnn anaconda
+module purge
+module load cuda/11.8 anaconda
 conda activate powd
+echo $CUDA_VISIBLE_DEVICES
+python -c "import torch; print(f'Torch: {torch.__version__}\nCUDA: {torch.version.cuda}\nCUDA devices: {torch.cuda.device_count()}')"
+python -c "import torch; print(torch.cuda.is_available())"
+# nvidia-smi
+nvcc --version
+
 
 # ## monitoring job ##
 # module load utilities monitor
@@ -38,17 +40,17 @@ echo
 
 ## your code ##
 
-# change directory
-# cd ~/scratch_space/Power-of-Choice/image_classification
-cd ~/scratch/Power-of-Choice/image_classification
+# # change directory
+# # cd ~/scratch_space/Power-of-Choice/image_classification
+# cd ~/scratch/Power-of-Choice/image_classification
 
-# capture memory and time footprint
-/usr/bin/time -f "\\n\\nMax CPU Memory: %M KB\\nTime Elapsed: %E sec" \
-python main.py -c ./configs/fig4a.json
+# # capture memory and time footprint
+# /usr/bin/time -f "\\n\\nMax CPU Memory: %M KB\\nTime Elapsed: %E sec" \
+# python main.py -c ./configs/fig4a.json
 
-# ## shut down the resource monitors ##
-# kill -s INT $CPU_PID $MEM_PID
+# # ## shut down the resource monitors ##
+# # kill -s INT $CPU_PID $MEM_PID
 
-# Run the job with: sbatch job.sh
-# Check the status of the job with: squeue -u <username>
-# Cancel the job with: scancel <job-id>
+# # Run the job with: sbatch job.sh
+# # Check the status of the job with: squeue -u <username>
+# # Cancel the job with: scancel <job-id>
