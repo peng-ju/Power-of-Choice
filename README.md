@@ -37,9 +37,10 @@ Step 1: Create and activate conda environment
 Step 2.1: Install **PyTorch 2.0.1**, [reference](https://pytorch.org/get-started/previous-versions/#v201)
 * For Mac: `$ conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 -c pytorch -y`
 * For Windows/Ubuntu (CPU): `$ conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 cpuonly -c pytorch -y`
+* For Windows/Ubuntu (GPU with Cuda 11.8): `$ conda install pytorch==2.0.1 torchvision==0.15.2 torchaudio==2.0.2 pytorch-cuda=11.8 -c pytorch -c nvidia`
 * Verify install:  
 ```bash
-$ python -c "import torch; print(f'Torch: {torch.__version__}\nCUDA: {torch.version.cuda}\nCUDA devices: {torch.cuda.device_count()}')"
+$ python -c "import torch; print(f'Torch: {torch.__version__}\nCUDA: {torch.version.cuda}\nIs CUDA available: {torch.cuda.is_available()}\nCUDA devices: {torch.cuda.device_count()}')"
 ```
 
 Step 2.2: Install common packages
