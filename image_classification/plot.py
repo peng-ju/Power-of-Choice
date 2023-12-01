@@ -12,7 +12,7 @@ import matplotlib.cm as cm
 c_t = cm.get_cmap('tab10')
 
 
-def make_plot(log_filenames, metric='train_loss'):
+def make_plot(log_filenames, metric='train_loss', niters=None, save=True, save_path=None):
     ## plot settings
     # color maps reference: https://matplotlib.org/stable/users/explain/colors/colormaps.html#qualitative
     # line styles reference: https://matplotlib.org/stable/gallery/lines_bars_and_markers/linestyles.html
@@ -34,6 +34,7 @@ def make_plot(log_filenames, metric='train_loss'):
     for log_filename in log_filenames:
         # load metric data from json file and fetch configuration
         start_idx = 0
+        plot_label = None
         with open(log_filename, 'r') as f:
             for line in f:
                 line = line.strip()  # to remove '\n' at the end of line
@@ -47,6 +48,8 @@ def make_plot(log_filenames, metric='train_loss'):
                     clients_per_round = int(line.split(',')[1])
                 elif line.startswith('name'):
                     name = line.split(',')[1]
+                elif line.startswith('plot_label'):
+                    plot_label = line.split(',')[1]
                 elif line.startswith('plot_linecolor'):
                     color = line[len('plot_linecolor,'):]
                     if color.startswith('(') or color.startswith('c_t('):
@@ -59,10 +62,14 @@ def make_plot(log_filenames, metric='train_loss'):
 
         df = pd.read_csv(log_filename, skiprows=range(start_idx))  # dataframe starts from start_idx
         values = df[df['epoch'] == -1][['round', metric]].sort_values(['round'])[metric].tolist()
+        if niters:
+            values = values[:niters]
         
         # plot global loss for each configuration
         if algo =='rand' or algo =='adapow-d':
             p_label = algo
+            if plot_label:
+                p_label = plot_label
         else:
             p_label = algo+', d={}'.format(powd)
         plt.plot(values, lw=lw, color=color, ls = lstyle, label=p_label)
@@ -79,8 +86,11 @@ def make_plot(log_filenames, metric='train_loss'):
     # plt.show()
     directory = os.path.dirname(log_filenames[0])
     plot_filename = os.path.join(directory, f'{name}_{metric}.pdf')
-    plt.savefig(plot_filename, bbox_inches='tight')
-    print(f'saving plot to {plot_filename}')
+    if save:
+        if save_path:
+            plot_filename = save_path
+        plt.savefig(plot_filename, bbox_inches='tight')
+        print(f'saving plot to {plot_filename}')
     
     return
 
