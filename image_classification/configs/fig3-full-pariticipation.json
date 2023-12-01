@@ -1,0 +1,39 @@
+{
+    "common": {
+        "name": "synthetic_fig3-full-participation",
+        "model": "LR",
+        "num_classes": 10,
+        "rounds": 800,
+        "localE": 30,
+        "bs": 50,
+        "lr": 0.05,
+        "decay": [300, 600],
+        "seed": 12345
+    },
+    "different": {
+        "rand-all": {
+            "dataset": "synthetic-all",
+            "num_clients": 1,
+            "clients_per_round": 1,
+            "algo": "rand",
+            "plot_linecolor": "g",
+            "plot_linestyle": "-",
+            "plot_label": "centralized"
+        },
+        "rand-all-clients": {
+            "dataset": "synthetic",
+            "num_clients": 30,
+            "clients_per_round": 30,
+            "algo": "rand",
+            "plot_linecolor": "b",
+            "plot_linestyle": "-",
+            "plot_label": "de-centralized full"
+        }
+    },
+    "plots": [
+        "train_loss",
+        "test_loss",
+        "train_acc",
+        "test_acc"
+    ]
+}
