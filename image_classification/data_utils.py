@@ -110,6 +110,26 @@ class FederatedDataset(object):
             x, y = self.trainset[0]
             self.input_dim = x.size(0)
 
+        elif dataset == 'synthetic-all':
+            ## full synthetic data
+            # data
+            self.trainset = SyntheticDataset('../data/synthetic_data/', train=True)
+            self.testset = SyntheticDataset('../data/synthetic_data/', train=False)
+
+            # partitions
+            self.train_partitions = {0: [j for i in self.trainset.partitions.values() for j in i]}  # self.trainset.partitions
+            self.test_partitions = {0: [j for i in self.testset.partitions.values() for j in i]}  # self.testset.partitions
+
+            # ratio
+            self.ratio = np.array([len(v) for k, v in self.train_partitions.items()])
+            self.ratio = self.ratio/np.sum(self.ratio)
+            print('TRAIN Data ratio: %s' % str(self.ratio))
+            print('sum of ratio: %s' % str(sum(self.ratio)))
+
+            # input size
+            x, y = self.trainset[0]
+            self.input_dim = x.size(0)
+
         else:
             if dataset == 'fmnist':
                 # data

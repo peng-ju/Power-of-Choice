@@ -82,3 +82,8 @@ export MLFLOW_TRACKING_PASSWORD=<password/token>
 
 ## Save and load model using MLflow
 Please refer to `MLflow_guide.ipynb` for detailed information.
+
+
+## TODO
+- [ ] remove default values in argparse
+- [ ] confirm correctness of pipeline with another fedml code/paper
