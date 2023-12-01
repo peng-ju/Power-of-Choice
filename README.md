@@ -89,3 +89,4 @@ Please refer to `MLflow_guide.ipynb` for detailed information.
 - [ ] another major difference is that in our case the rand and pow-d converge to same values towards the end but the paper shows the gap remains for image classification
 - [ ] remove default values in argparse, to be doubly sure that only the provided values are used
 - [ ] confirm correctness of pipeline with another fedml code/paper
+- [ ] distirbuted training setup using pytorch
