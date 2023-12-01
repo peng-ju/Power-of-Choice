@@ -85,7 +85,7 @@ Please refer to `MLflow_guide.ipynb` for detailed information.
 
 
 ## TODO
-- [ ] remove default values in argparse
+- [ ] difference in loss values for image classification experiments (but accuracy values matches approximately)
+- [ ] another major difference is that in our case the rand and pow-d converge to same values towards the end but the paper shows the gap remains for image classification
+- [ ] remove default values in argparse, to be doubly sure that only the provided values are used
 - [ ] confirm correctness of pipeline with another fedml code/paper
-- [ ] difference in loss values (but accuracy values almost matches)
-- [ ] another major difference is that in our case the rand and pow-d converge to same values towards the end but the paper shows the gap remains
