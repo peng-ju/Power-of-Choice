@@ -66,10 +66,10 @@ def make_plot(log_filenames, metric='train_loss', niters=None, save=True, save_p
             values = values[:niters]
         
         # plot global loss for each configuration
-        if algo =='rand' or algo =='adapow-d':
+        if plot_label:
+            p_label = plot_label
+        elif algo =='rand' or algo =='adapow-d':
             p_label = algo
-            if plot_label:
-                p_label = plot_label
         else:
             p_label = algo+', d={}'.format(powd)
         plt.plot(values, lw=lw, color=color, ls = lstyle, label=p_label)
