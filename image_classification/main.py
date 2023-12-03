@@ -36,6 +36,7 @@ def args_parser():
     parser.add_argument("--lr", default=0.1, type=float, help="client learning rate, $\eta$")
     parser.add_argument('--decay', nargs='*', type=int, help='rounds to decay LR')
     parser.add_argument("--alpha", default=0.2, type=float, help="control the non-iidness of dataset")
+    parser.add_argument("--subset_ratio", type=float, help="fraction of dataset to use for quick prototyping")
     parser.add_argument("--NIID", action="store_true", help="whether the dataset is non-iid or not")
     # parser.add_argument("--p", "-p", action="store_true", help="whether the dataset is partitioned or not")
 
@@ -94,7 +95,7 @@ def run(rank, args):
     # run federated learning experiment for given configuration
     server = FedAvg(args.lr, args.bs, args.localE, args.algo, args.model, 
                     args.powd, args.num_clients, args.clients_per_round, 
-                    args.dataset, args.num_classes, args.NIID, args.alpha, 
+                    args.dataset, args.num_classes, args.NIID, args.alpha, args.subset_ratio,
                     args.delete_ratio, args.rnd_ratio, args.seed, args.device)
     
     client_train_losses = []

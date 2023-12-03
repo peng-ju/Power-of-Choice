@@ -1,12 +1,14 @@
 import os
 import json
 import random
+import math
 from random import Random
 
 import numpy as np
 from numpy.random import RandomState
 
 import torch
+from torch.utils.data import Dataset, Subset, random_split
 import torch.utils.data.distributed
 import torchvision
 from torchvision import datasets, transforms
@@ -53,7 +55,7 @@ def read_data(train_data_dir, test_data_dir):
     return clients, groups, train_data, test_data
 
 
-class SyntheticDataset(torch.utils.data.Dataset):
+class SyntheticDataset(Dataset):
     def __init__(self, data_dir, train=True):
         if train:
             _, _, self.data, _ = read_data(data_dir, data_dir)
@@ -87,8 +89,15 @@ class SyntheticDataset(torch.utils.data.Dataset):
     
 
 class FederatedDataset(object):
-    def __init__(self, dataset, args=None, num_clients=100, seed=1234, rnd=0, 
-                 isNonIID=False, alpha=0.2):
+    def __init__(self, dataset, num_clients=100, seed=1234, rnd=0, 
+                 isNonIID=False, alpha=0.2, subset_ratio=None):
+        print('Loading data: %s' % dataset
+              + ', num_clients: %d' % num_clients
+              + ', seed: %d' % seed
+              + ', rnd: %d' % rnd
+              + ', isNonIID: %s' % isNonIID
+              + ', alpha: %s' % alpha
+              + ', subset_ratio: %s' % subset_ratio)
         self.dataset = dataset
 
         if dataset == 'synthetic':
@@ -111,7 +120,8 @@ class FederatedDataset(object):
             self.input_dim = x.size(0)
 
         elif dataset == 'synthetic-all':
-            ## full synthetic data
+            ## full synthetic data (no partitions)
+            ## simulates a single client with all data: baseline for traditional ML
             # data
             self.trainset = SyntheticDataset('../data/synthetic_data/', train=True)
             self.testset = SyntheticDataset('../data/synthetic_data/', train=False)
@@ -153,7 +163,7 @@ class FederatedDataset(object):
                     transforms.RandomHorizontalFlip(),
                     transforms.ToTensor(),
                     transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-                self.trainset = torchvision.datasets.CIFAR10(root='./data',
+                self.trainset = torchvision.datasets.CIFAR10(root='../data',
                                                     train=True, 
                                                     download=True, 
                                                     transform=transform_train)
@@ -161,7 +171,7 @@ class FederatedDataset(object):
                 transform_test = transforms.Compose([
                 transforms.ToTensor(),
                 transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))])
-                self.testset = torchvision.datasets.CIFAR10(root='./data',
+                self.testset = torchvision.datasets.CIFAR10(root='../data',
                                                 train=False, 
                                                 download=True, 
                                                 transform=transform_test)
@@ -171,17 +181,23 @@ class FederatedDataset(object):
                 apply_transform = transforms.Compose([
                     transforms.ToTensor(),
                     transforms.Normalize((0.1307,), (0.3081,))])
-                self.trainset = torchvision.datasets.EMNIST(root='./data',
+                self.trainset = torchvision.datasets.EMNIST(root='../data',
                                                         split = 'digits',
                                                         train=True,
                                                         download=True,
                                                         transform=apply_transform)
 
-                self.testset = torchvision.datasets.EMNIST(root='./data',
+                self.testset = torchvision.datasets.EMNIST(root='../data',
                                                             split= 'digits',
                                                             train=False,
                                                             download=True,
                                                             transform=apply_transform)
+                
+            # subset data 
+            # TODO: add this functionality for synthetic data ??
+            if subset_ratio:
+                self.trainset, _ = random_split(self.trainset, [subset_ratio, 1-subset_ratio])
+                self.testset, _ = random_split(self.testset, [subset_ratio, 1-subset_ratio])
                 
             # partitions
             partition_sizes = [1.0 / num_clients for _ in range(num_clients)]
@@ -246,7 +262,8 @@ class DataPartitioner(object):
         return Partition(self.data, self.partitions[partition])
 
     def __getNonIIDdata__(self, data, sizes, seed, alpha):
-        labelList = data.targets
+        # labelList = data.targets
+        labelList = np.array([data[i][1] for i in range(len(data))])  # alternative for above
         rng = Random()
         rng.seed(seed)
         a = [(label, idx) for idx, label in enumerate(labelList)]
@@ -301,7 +318,8 @@ class DataPartitioner(object):
     def __getDirichletData__(self, data, psizes, alpha, rnd, print_f):
         n_nets = len(psizes)
         K = 10
-        labelList = np.array(data.targets)
+        # labelList = np.array(data.targets)
+        labelList = np.array([data[i][1] for i in range(len(data))])  # alternative for above
         min_size = 0
         N = len(labelList)
         rann = RandomState(2020)

@@ -11,7 +11,7 @@ from data_utils import FederatedDataset
 
 class FedAvg(object):
     def __init__(self, lr, bs, localE, algo, model, powd, num_clients, clients_per_round, 
-                 dataset, num_classes, NIID, alpha, delete_ratio, rnd_ratio, seed, device=None):
+                 dataset, num_classes, NIID, alpha, subset_ratio, delete_ratio, rnd_ratio, seed, device=None):
         """ initialize federated optimizer """
         # hyperparameters
         self.lr = lr  # learning rate
@@ -25,13 +25,15 @@ class FedAvg(object):
         self.num_classes = num_classes  # number of classes in the dataset
         self.NIID = NIID
         self.alpha = alpha
+        self.subset_ratio = subset_ratio
         self.delete_ratio = delete_ratio
         self.rnd_ratio = rnd_ratio
         self.seed = seed
         self.device = device  # TODO: yet to integrate ____.to(device)
 
         # read data
-        self.data = FederatedDataset(self.dataset, None, self.num_clients, self.seed, 0, self.NIID, self.alpha)
+        self.data = FederatedDataset(self.dataset, self.num_clients, self.seed, 0, 
+                                     self.NIID, self.alpha, self.subset_ratio)
         self.ratio = self.data.ratio  # ratio, p_k for each client k
         self.dim = self.data.input_dim  # input dimension
         
