@@ -1,6 +1,9 @@
 # Power-of-Choice
 Reproducibility study of the paper ["Towards Understanding Biased Client Selection in Federated Learning"](./jee-cho22a.pdf) by Yae Jee Cho, Jianyu Wang and Gauri Joshi.
 
+* [Report](./Report-ReScience.pdf)
+* [Slides](./Presentation-Hackathon.pdf)
+
 
 ## Directory Structure
 ```
@@ -12,6 +15,8 @@ Reproducibility study of the paper ["Towards Understanding Biased Client Selecti
 ├── data                              # synthetic data
 ├── MLflow_guide.ipynb                # ML flow guide
 ├── jee-cho22a.pdf                    # Original paper for reproducibility
+├── Report-ReScience.pdf              # Our reproducibility report
+├── Presentation-Hackathon.pdf        # Presentation talk for hackathon
 ├── requirements.txt                  # PIP requirements file
 ├── environment.yml                   # CONDA environment file
 ├── .gitignore
@@ -90,3 +95,7 @@ Please refer to `MLflow_guide.ipynb` for detailed information.
 - [ ] remove default values in argparse, to be doubly sure that only the provided values are used
 - [ ] confirm correctness of pipeline with another fedml code/paper
 - [ ] distirbuted training setup using pytorch
+
+
+## Contact 
+[Peng Ju](mailto:ju26@purdue.edu), [Gautam Choudhary](mailto:gc.iitr@gmail.com)
