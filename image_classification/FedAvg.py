@@ -162,7 +162,7 @@ class FedAvg(object):
 
         return loss, acc
 
-    def train(self, i):
+    def train(self, i, update=True):
         """ compute loss, acc for client `i` on train data and run optimizer step """
         self.model.train()
 
@@ -192,10 +192,17 @@ class FedAvg(object):
         # backward pass - compute gradients
         loss.backward()
 
-        # backward pass - update weights
-        self.optimizer.step()
+        # gradient norm
+        grad_norm = 0
+        for param in self.model.parameters():
+            grad_norm += torch.norm(param.grad.detach())**2
+        grad_norm = grad_norm**(1/2)
 
-        return loss.item(), acc.item()
+        if update:
+            # backward pass - update weights
+            self.optimizer.step()
+
+        return loss.item(), acc.item(), grad_norm
 
     def local_update(self, active_clients):
         """ train the set of active clients """
@@ -211,7 +218,7 @@ class FedAvg(object):
             
             # run E steps of SGD on client `i`
             for _ in range(self.localE):
-                tmp_loss, tmp_acc = self.train(i)
+                tmp_loss, tmp_acc, tmp_norm = self.train(i)
                 loss_i += tmp_loss
             loss_i = loss_i/self.localE
             losses.append(loss_i)
@@ -262,7 +269,7 @@ class FedAvg(object):
             rnd_idx = idxs_users
 
         elif self.algo == 'rand':
-            # Step 1: select 'm' clients with probability proportional to their loss with replacement
+            # Step 1: select 'm' clients with probability proportional to their dataset size with replacement
             idxs_users = np.random.choice(self.num_clients, p=self.ratio, size=self.clients_per_round, replace=True)
 
         elif self.algo == 'randint':
@@ -278,10 +285,42 @@ class FedAvg(object):
             modified_data_ratios = [self.ratio[int(i)] for i in search_idx]/sum([self.ratio[int(i)] for i in search_idx])
             idxs_users = np.random.choice(search_idx, p=modified_data_ratios, size=self.clients_per_round, replace=True)
 
+        elif self.algo == 'pow-norm':
+            # power-of-norm strategy
+
+            # set model params one time
+            self.set_params(self.global_parameters)
+
+            # Step 1: select 'd' clients with probability proportional to their dataset size without replacement
+            rnd_idx = np.random.choice(self.num_clients, p=self.ratio, size=self.powd, replace=False)
+
+            # Step 2: sort the selected clients in descending order of their loss
+            norms, losses = [], []
+            for i in rnd_idx:
+                _, _, norm_i = self.train(i, update=False)
+                print(f'norm of client {i}: {norm_i}, loss: {client_loss[i]}')
+                norms.append(norm_i)
+                losses.append(client_loss[i])
+            norms = np.array(norms)
+            print(f'norms: {norms}')
+            losses = np.array(losses)
+            print(f'losses: {losses}')
+            norms = (norms - min(norms))/(max(norms) - min(norms))
+            print(f'normalized norms: {norms}')
+            losses = (losses - min(losses))/(max(losses) - min(losses))
+            print(f'normalized losses: {losses}')
+            print(f'norms+losses: {norms+losses}')
+            repval = list(zip(norms+losses, rnd_idx))
+            repval.sort(key=lambda x: x[0], reverse=True)
+            rep = list(zip(*repval))
+
+            # Step 3: select indices of top 'm' clients from the sorted list
+            idxs_users = rep[1][:int(self.clients_per_round)]
+
         elif self.algo in ['pow-d', 'cpow-d', 'adapow-d']:
             # standard power-of-choice strategy
 
-            # Step 1: select 'd' clients with probability proportional to their loss without replacement
+            # Step 1: select 'd' clients with probability proportional to their dataset size without replacement
             rnd_idx = np.random.choice(self.num_clients, p=self.ratio, size=self.powd, replace=False)
 
             # Step 2: sort the selected clients in descending order of their loss
@@ -295,7 +334,7 @@ class FedAvg(object):
         elif self.algo == 'rpow-d':
             # computation/communication efficient variant of 'pow-d'
 
-            # Step 1: select 'd' clients with probability proportional to their loss without replacement
+            # Step 1: select 'd' clients with probability proportional to their dataset size without replacement
             rnd_idx1 = np.random.choice(self.num_clients, p=self.ratio, size=self.powd, replace=False)
 
             # Step 2: sort the selected clients in descending order of their proxy-loss
