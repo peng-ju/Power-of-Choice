@@ -13,3 +13,4 @@ embedding
 slurm-*
 mlruns
 tmp
+sentiment_analysis/Sent140/

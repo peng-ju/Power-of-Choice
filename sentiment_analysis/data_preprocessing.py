@@ -42,8 +42,8 @@ def load_GloVe_twitter_emb(path_glove="embedding/glove.twitter.27B.200d.txt"):
 
 def load_twitter_datasets(minimum_tweets,
                           args,
-                          path_data_train="Sent140/traindata_sent140.csv", # path to train data
-                          path_data_test="Sent140/testdata_sent140.csv" # path to train data
+                          path_data_train="Sent140/traindata_sent140.csv", # path to train data  ## TODO: add data path `../data/Sent140/`
+                          path_data_test="Sent140/testdata_sent140.csv" # path to train data  ## TODO: add data path `../data/Sent140/`
                           ):
 
     '''
